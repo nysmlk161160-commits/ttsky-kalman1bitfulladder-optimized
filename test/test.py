@@ -60,10 +60,14 @@ async def test_kalman_optimized(dut):
         dut.uio_in.value = 1 << 4
         await FallingEdge(dut.clk)
         dut.uio_in.value = 0
-        for _ in range(340):
+        for cycles in range(1, 341):
             await ClockCycles(dut.clk, 1)
             await Timer(1, unit="ns")
             if int(dut.uio_out.value) & 128:
+                dut._log.info(
+                    f"Kalman latency = {cycles} cycles, "
+                    f"{cycles * 20} ns"
+                )
                 break
         else:
             assert False, f"Timeout for {(z, x, p, r)}"
