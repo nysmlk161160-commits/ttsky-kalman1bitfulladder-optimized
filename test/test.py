@@ -1,4 +1,6 @@
+import json
 import random
+from pathlib import Path
 import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import ClockCycles, FallingEdge, Timer
@@ -50,7 +52,10 @@ async def test_kalman_optimized(dut):
         r = rng.randrange(1024)
         cases.append((z, x, p, r))
 
-    for z, x, p, r in cases:
+    output_dir = Path("output")
+    output_dir.mkdir(exist_ok=True)
+    case_records = []
+    for case_index, (z, x, p, r) in enumerate(cases):
         await write_value(dut, 0, z & 1023)
         await write_value(dut, 1, x & 1023)
         await write_value(dut, 2, p)
@@ -77,5 +82,18 @@ async def test_kalman_optimized(dut):
         expected_p = (p - ((k * p) >> 6)) & 1023
         actual_x = await read_value(dut, 0)
         actual_p = await read_value(dut, 1)
+        case_records.append({
+            "case_index": case_index, "z": z, "x": x, "p": p, "r": r,
+            "gain_code": k, "expected_x": expected_x, "expected_p": expected_p,
+            "actual_x": actual_x, "actual_p": actual_p,
+            "cycles": cycles, "clock_period_ns": 20, "latency_ns": cycles * 20,
+            "path": "shortcut" if (p + r == 0 or r == 0) else "normal",
+            "passed": actual_x == expected_x and actual_p == expected_p,
+        })
+        (output_dir / "kalman_cases.json").write_text(json.dumps({
+            "version": "version4", "seed": 20261101,
+            "sampling": "ClockCycles(1), then Timer(1 ns), after Start pulse end",
+            "case_count": len(case_records), "cases": case_records,
+        }, indent=2), encoding="utf-8")
         assert actual_x == expected_x, (z, x, p, r, "x", actual_x, expected_x)
         assert actual_p == expected_p, (z, x, p, r, "p", actual_p, expected_p)

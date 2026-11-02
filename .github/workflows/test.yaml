@@ -31,6 +31,9 @@ jobs:
           # make will return success even if the tests fail, so check results.xml for failed tests
           python -m cocotb_tools.check_results results.xml
 
+      - name: Run version4 digit-serial regression
+        run: python test/run_digit_serial.py
+
       - name: Test Summary
         uses: test-summary/action@v2.4
         with:
@@ -46,3 +49,4 @@ jobs:
             test/tb.fst
             test/results.xml
             test/output/*
+            test/sim_build/digit_serial/8bit/*

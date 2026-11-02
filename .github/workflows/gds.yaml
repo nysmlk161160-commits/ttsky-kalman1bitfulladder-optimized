@@ -37,6 +37,14 @@ jobs:
       - name: GL test
         uses: TinyTapeout/tt-gds-action/gl_test@ttsky26d
 
+      - name: Archive version4 GL case records
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: version4-gl-case-records
+          path: test/output/kalman_cases.json
+          if-no-files-found: warn
+
   viewer:
     needs: gds
     runs-on: ubuntu-24.04

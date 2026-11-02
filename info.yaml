@@ -1,8 +1,8 @@
 project:
-  title: "Kalman Serial Arithmetic Optimized"
+  title: "Kalman Version4 8-bit Digit Serial"
   author: "Student"
   discord: ""
-  description: "Q4.6 Kalman correction with shared 1-bit serial arithmetic and reduced register duplication"
+  description: "Version4: 8-bit digit-serial Kalman correction, preserving baseline precision and I/O"
   language: "Verilog"
   clock_hz: 50000000
   tiles: "1x1"
