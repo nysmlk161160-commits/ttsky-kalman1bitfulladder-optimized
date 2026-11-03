@@ -51,7 +51,7 @@ def main():
     if not iverilog:
         raise SystemExit('iverilog is not on PATH. Install Icarus Verilog first.')
     vvp = shutil.which('vvp') or str(Path(iverilog).with_name('vvp.exe'))
-    label = 'baseline' if args.baseline else 'fused'
+    label = 'baseline' if args.baseline else 'direct'
     out = (args.output or repo / 'test/sim_build/digit_serial' / label).resolve()
     out.mkdir(parents=True, exist_ok=True)
     cases = vectors()
@@ -62,7 +62,7 @@ def main():
         expected_p = (p - ((k * p) >> 6)) & 1023
         lines.append(f'{z} {x} {p} {r} {expected_x} {expected_p}')
     (out / 'vectors.txt').write_text('\n'.join(lines) + '\n', encoding='ascii')
-    normal, shortcut = (267, 189) if args.baseline else (27, 21)
+    normal, shortcut = (267, 189) if args.baseline else (1, 1)
     subprocess.run([iverilog, '-g2012', '-Wall', '-s', 'tb_digit_serial',
                     '-o', str(out / 'sim.vvp'), str(rtl),
                     str(repo / 'test/tb_digit_serial.v')], check=True)

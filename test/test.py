@@ -91,9 +91,94 @@ async def test_kalman_optimized(dut):
             "passed": actual_x == expected_x and actual_p == expected_p,
         })
         (output_dir / "kalman_cases.json").write_text(json.dumps({
-            "version": "version6", "seed": 20261101,
+            "version": "version8", "seed": 20261101,
             "sampling": "ClockCycles(1), then Timer(1 ns), after Start pulse end",
             "case_count": len(case_records), "cases": case_records,
         }, indent=2), encoding="utf-8")
         assert actual_x == expected_x, (z, x, p, r, "x", actual_x, expected_x)
         assert actual_p == expected_p, (z, x, p, r, "p", actual_p, expected_p)
+
+
+@cocotb.test()
+async def test_direct_protocol(dut):
+    """Public-port checks, also run against the cloud gate-level netlist."""
+    records = []
+    out = Path("output/protocol_cases.json")
+    out.parent.mkdir(exist_ok=True)
+
+    async def check_values(name, expected_x, expected_p):
+        actual_x = await read_value(dut, 0)
+        actual_p = await read_value(dut, 1)
+        passed = (actual_x, actual_p) == (expected_x & 1023, expected_p & 1023)
+        records.append({"name": name, "actual_x": actual_x, "actual_p": actual_p,
+                        "expected_x": expected_x & 1023, "expected_p": expected_p & 1023,
+                        "passed": passed})
+        out.write_text(json.dumps({"version":"version8", "cases":records}, indent=2), encoding="utf-8")
+        assert passed, records[-1]
+
+    async def start_and_wait():
+        await FallingEdge(dut.clk)
+        dut.uio_in.value = 16
+        await FallingEdge(dut.clk)
+        dut.uio_in.value = 0
+        for _ in range(10):
+            await ClockCycles(dut.clk, 1)
+            await Timer(1, unit="ns")
+            if int(dut.uio_out.value) & 128:
+                return
+        assert False, "Protocol update timeout"
+
+    dut.ena.value = 1
+    dut.ui_in.value = 0
+    dut.uio_in.value = 0
+    dut.rst_n.value = 0
+    cocotb.start_soon(Clock(dut.clk, 20, unit="ns").start())
+    await ClockCycles(dut.clk, 4)
+    await FallingEdge(dut.clk)
+    dut.rst_n.value = 1
+    await check_values("reset clears outputs", 0, 0)
+
+    z, x, p, r = 96, 0, 64, 320
+    for address, value in enumerate((z, x, p, r)):
+        await write_value(dut, address, value)
+    k = (p << 6) // (p + r)
+    ex, ep = x + ((k * (z-x)) >> 6), p - ((k*p) >> 6)
+    await FallingEdge(dut.clk)
+    dut.uio_in.value = 16
+    await FallingEdge(dut.clk)
+    # Attempt to overwrite R and restart while the previous update is busy.
+    dut.ui_in.value = 255
+    dut.uio_in.value = 27
+    await FallingEdge(dut.clk)
+    dut.uio_in.value = 0
+    await ClockCycles(dut.clk, 3)
+    await Timer(1, unit="ns")
+    assert int(dut.uio_out.value) & 128
+    assert not (int(dut.uio_out.value) & 64)
+    await check_values("busy write/start ignored", ex, ep)
+    dut.uio_in.value = 0
+    await ClockCycles(dut.clk, 5)
+    await Timer(1, unit="ns")
+    assert int(dut.uio_out.value) & 128
+    await check_values("ready and outputs remain sticky", ex, ep)
+    await start_and_wait()
+    await check_values("busy write did not modify next R", ex, ep)
+
+    await FallingEdge(dut.clk)
+    dut.uio_in.value = 16
+    await FallingEdge(dut.clk)
+    dut.uio_in.value = 0
+    dut.rst_n.value = 0
+    await ClockCycles(dut.clk, 3)
+    await Timer(1, unit="ns")
+    assert not (int(dut.uio_out.value) & 192)
+    await check_values("reset aborts update", 0, 0)
+    await FallingEdge(dut.clk)
+    dut.rst_n.value = 1
+    # R is deliberately not written: reset must have restored R=320.
+    for address, value in enumerate((z, x, p)):
+        await write_value(dut, address, value)
+    await start_and_wait()
+    await check_values("reset restores default R", ex, ep)
+    await start_and_wait()
+    await check_values("repeated independent update", ex, ep)

@@ -86,7 +86,7 @@ module tb_digit_serial;
             expected_cycles = ((p + r == 0) || (r == 0)) ? shortcut_cycles : normal_cycles;
             if (cycles != expected_cycles)
                 $fatal(1, "Latency case %0d: got %0d expected %0d", case_index, cycles, expected_cycles);
-            if (expected_cycles == normal_cycles) begin
+            if ((p + r != 0) && (r != 0)) begin
                 normal_count = normal_count + 1;
                 normal_seen = cycles;
             end else begin

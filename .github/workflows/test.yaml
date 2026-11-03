@@ -31,7 +31,7 @@ jobs:
           # make will return success even if the tests fail, so check results.xml for failed tests
           python -m cocotb_tools.check_results results.xml
 
-      - name: Run version6 interface regression
+      - name: Run version8 interface regression
         run: python test/run_digit_serial.py
 
       - name: Exhaust divider and multiplier input domains
@@ -52,5 +52,5 @@ jobs:
             test/tb.fst
             test/results.xml
             test/output/*
-            test/sim_build/digit_serial/fused/*
+            test/sim_build/digit_serial/direct/*
             test/sim_build/core_exhaustive/*
