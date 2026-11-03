@@ -1,8 +1,8 @@
 project:
-  title: "Kalman Version5 12-bit Digit Serial"
+  title: "Kalman Version6 Fused Arithmetic"
   author: "Student"
   discord: ""
-  description: "Version5: 12-bit digit-serial Kalman correction, preserving baseline precision and I/O"
+  description: "Version6: fused-cycle Kalman correction, preserving baseline precision and I/O"
   language: "Verilog"
   clock_hz: 50000000
   tiles: "1x1"

@@ -36,16 +36,14 @@ module kalman_div12 (
     output reg done
 );
     reg [10:0] remainder;
-    reg [11:0] trial_bits;
     reg [5:0] quotient;
     reg equal_case;
     reg [2:0] gain_index;
-    reg phase;
     reg running;
     assign result = {equal_case, quotient};
 
-    // Retain one initialization cycle per quotient bit. The next cycle
-    // subtracts the complete 12-bit trial in one operation.
+    // The trial shift is wiring: consume one fractional quotient bit per clock.
+    wire [11:0] trial_bits = {remainder, 1'b0};
     wire [11:0] difference;
     wire no_borrow;
     wire [5:0] next_quotient = {quotient[4:0], no_borrow};
@@ -57,11 +55,9 @@ module kalman_div12 (
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             remainder <= 0;
-            trial_bits <= 0;
             quotient <= 0;
             equal_case <= 0;
             gain_index <= 0;
-            phase <= 0;
             running <= 0;
             done <= 0;
         end else begin
@@ -71,24 +67,17 @@ module kalman_div12 (
                 quotient <= 0;
                 equal_case <= (s != 0 && p == s);
                 gain_index <= 0;
-                phase <= 0;
                 running <= (s != 0 && p != s);
                 if (s == 0 || p == s)
                     done <= 1;
             end else if (running) begin
-                if (!phase) begin
-                    trial_bits <= {remainder, 1'b0};
-                    phase <= 1;
+                remainder <= no_borrow ? difference[10:0] : trial_bits[10:0];
+                quotient <= next_quotient;
+                if (gain_index == 5) begin
+                    running <= 0;
+                    done <= 1;
                 end else begin
-                    remainder <= no_borrow ? difference[10:0] : (remainder << 1);
-                    quotient <= next_quotient;
-                    if (gain_index == 5) begin
-                        running <= 0;
-                        done <= 1;
-                    end else begin
-                        gain_index <= gain_index + 1'b1;
-                        phase <= 0;
-                    end
+                    gain_index <= gain_index + 1'b1;
                 end
             end
         end
@@ -104,16 +93,15 @@ module kalman_mul12 (
 );
     reg [18:0] product;
     reg [2:0] bit_count;
-    reg phase;
     reg running;
     assign result = $signed(product[16:6]);
 
-    // Preserve the 12-bit A / 7-bit Q register organization and a separate
-    // whole-product shift cycle. Only the digit width and its controls change.
+    // Fuse the conditional add and arithmetic shift at the register input.
+    // Shift the newly computed sum, not the previous cycle's accumulator.
     wire [11:0] sum;
     wire unused_carry;
     wire [11:0] multiplicand = {b[10], b};
-    wire [18:0] shifted_product = {product[18], product[18:1]};
+    wire [18:0] next_product = {sum[11], sum, product[6:1]};
     ripple_adder_12bit multiplier_adder (
         .a(product[18:7]), .b(multiplicand & {12{product[0]}}),
         .cin(1'b0), .sum(sum), .cout(unused_carry)
@@ -123,7 +111,6 @@ module kalman_mul12 (
         if (!rst_n) begin
             product <= 0;
             bit_count <= 0;
-            phase <= 0;
             running <= 0;
             done <= 0;
         end else begin
@@ -131,21 +118,14 @@ module kalman_mul12 (
             if (start) begin
                 product <= {12'b0, a};
                 bit_count <= 0;
-                phase <= 0;
                 running <= 1;
             end else if (running) begin
-                if (!phase) begin
-                    product[18:7] <= sum;
-                    phase <= 1;
+                product <= next_product;
+                if (bit_count == 6) begin
+                    running <= 0;
+                    done <= 1;
                 end else begin
-                    product <= shifted_product;
-                    phase <= 0;
-                    if (bit_count == 6) begin
-                        running <= 0;
-                        done <= 1;
-                    end else begin
-                        bit_count <= bit_count + 1'b1;
-                    end
+                    bit_count <= bit_count + 1'b1;
                 end
             end
         end

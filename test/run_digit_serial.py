@@ -42,6 +42,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--rtl', type=Path)
     parser.add_argument('--baseline', action='store_true')
+    parser.add_argument('--output', type=Path,
+                        help='Preserve raw local replay outside the source repository')
     args = parser.parse_args()
     repo = Path(__file__).resolve().parent.parent
     rtl = (args.rtl or repo / 'src/project.v').resolve()
@@ -49,8 +51,8 @@ def main():
     if not iverilog:
         raise SystemExit('iverilog is not on PATH. Install Icarus Verilog first.')
     vvp = shutil.which('vvp') or str(Path(iverilog).with_name('vvp.exe'))
-    label = 'baseline' if args.baseline else '12bit'
-    out = repo / 'test/sim_build/digit_serial' / label
+    label = 'baseline' if args.baseline else 'fused'
+    out = (args.output or repo / 'test/sim_build/digit_serial' / label).resolve()
     out.mkdir(parents=True, exist_ok=True)
     cases = vectors()
     lines = []
@@ -60,7 +62,7 @@ def main():
         expected_p = (p - ((k * p) >> 6)) & 1023
         lines.append(f'{z} {x} {p} {r} {expected_x} {expected_p}')
     (out / 'vectors.txt').write_text('\n'.join(lines) + '\n', encoding='ascii')
-    normal, shortcut = (267, 189) if args.baseline else (47, 35)
+    normal, shortcut = (267, 189) if args.baseline else (27, 21)
     subprocess.run([iverilog, '-g2012', '-Wall', '-s', 'tb_digit_serial',
                     '-o', str(out / 'sim.vvp'), str(rtl),
                     str(repo / 'test/tb_digit_serial.v')], check=True)

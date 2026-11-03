@@ -91,7 +91,7 @@ async def test_kalman_optimized(dut):
             "passed": actual_x == expected_x and actual_p == expected_p,
         })
         (output_dir / "kalman_cases.json").write_text(json.dumps({
-            "version": "version5", "seed": 20261101,
+            "version": "version6", "seed": 20261101,
             "sampling": "ClockCycles(1), then Timer(1 ns), after Start pulse end",
             "case_count": len(case_records), "cases": case_records,
         }, indent=2), encoding="utf-8")
