@@ -31,11 +31,14 @@ jobs:
           # make will return success even if the tests fail, so check results.xml for failed tests
           python -m cocotb_tools.check_results results.xml
 
-      - name: Run version6 interface regression
+      - name: Run version7 legacy interface regression
         run: python test/run_digit_serial.py
 
       - name: Exhaust divider and multiplier input domains
         run: python test/run_core_exhaustive.py
+
+      - name: Recursive filtering and interface protocol
+        run: python test/run_recursive.py
 
       - name: Test Summary
         uses: test-summary/action@v2.4
@@ -54,3 +57,4 @@ jobs:
             test/output/*
             test/sim_build/digit_serial/fused/*
             test/sim_build/core_exhaustive/*
+            test/sim_build/recursive/*

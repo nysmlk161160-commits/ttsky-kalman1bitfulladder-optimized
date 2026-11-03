@@ -1,8 +1,8 @@
 project:
-  title: "Kalman Version6 Fused Arithmetic"
+  title: "Kalman Version7 Recursive Filter"
   author: "Student"
   discord: ""
-  description: "Version6: fused-cycle Kalman correction, preserving baseline precision and I/O"
+  description: "Version7: optional Q prediction and state feedback with legacy correction mode"
   language: "Verilog"
   clock_hz: 50000000
   tiles: "1x1"

@@ -53,6 +53,8 @@ def main():
     vvp = shutil.which('vvp') or str(Path(iverilog).with_name('vvp.exe'))
     label = 'baseline' if args.baseline else 'fused'
     out = (args.output or repo / 'test/sim_build/digit_serial' / label).resolve()
+    if out.exists() and any(out.iterdir()):
+        raise SystemExit('Output directory already contains evidence; choose a new attempt path.')
     out.mkdir(parents=True, exist_ok=True)
     cases = vectors()
     lines = []

@@ -1,42 +1,35 @@
-![](../../workflows/gds/badge.svg) ![](../../workflows/docs/badge.svg) ![](../../workflows/test/badge.svg) ![](../../workflows/fpga/badge.svg)
+# Scalar Kalman ASIC: independent coursework experiments
 
-# Tiny Tapeout Verilog Project Template
+This clone contains version6 fused arithmetic and version7 optional recursive
+filtering on dedicated `exp/coursework-*` branches. Existing baseline and
+version1-5 working directories are not modified.
 
-- [Read the documentation for project](docs/info.md)
+The target is one SKY130 Tiny Tapeout tile, 20 ns clock and 75% target density.
+Version7 keeps default legacy correction behaviour and adds configurable
+process noise Q, covariance prediction with explicit saturation, and state
+feedback for the scalar random-walk model. Each sample remains externally
+triggered. This is a fixed-point approximation, not a sensor or fabricated-chip
+measurement.
 
-## What is Tiny Tapeout?
+- [Coursework rubric and optimisation rationale](docs/coursework_design_space.md)
+- [Version7 equations, interface, rounding and verification](docs/recursive_filter.md)
+- [Tiny Tapeout project information](docs/info.md)
 
-Tiny Tapeout is an educational project that aims to make it easier and cheaper than ever to get your digital and analog designs manufactured on a real chip.
+## Reproduce RTL checks
 
-To learn more and get started, visit https://tinytapeout.com.
+Install Icarus Verilog. From this repository root, choose new output folders:
 
-## Set up your Verilog project
+```sh
+python -B test/run_digit_serial.py --output ../results/version7/raw/local/legacy_NEW
+python -B test/run_core_exhaustive.py --output ../results/version7/raw/local/cores_NEW
+python -B test/run_recursive.py --output ../results/version7/raw/local/stream_NEW
+```
 
-1. Add your Verilog files to the `src` folder.
-2. Edit the [info.yaml](info.yaml) and update information about your project, paying special attention to the `source_files` and `top_module` properties. If you are upgrading an existing Tiny Tapeout project, check out our [online info.yaml migration tool](https://tinytapeout.github.io/tt-yaml-upgrade-tool/).
-3. Edit [docs/info.md](docs/info.md) and add a description of your project.
-4. Adapt the testbench to your design. See [test/README.md](test/README.md) for more information.
+CI additionally runs Cocotb RTL and gate-level public-interface tests, builds
+GDS and runs precheck. Pages/docs deployment is disabled for these branches.
+Original logs, artifacts, exact source snapshots, measured PPA and SHA256
+manifests are archived outside Git in the workspace `results/versionN/`.
 
-The GitHub action will automatically build the ASIC files using [LibreLane](https://www.zerotoasiccourse.com/terminology/librelane/).
-
-## Enable GitHub actions to build the results page
-
-- [Enabling GitHub Pages](https://tinytapeout.com/faq/#my-github-action-is-failing-on-the-pages-part)
-
-## Resources
-
-- [FAQ](https://tinytapeout.com/faq/)
-- [Digital design lessons](https://tinytapeout.com/digital_design/)
-- [Learn how semiconductors work](https://tinytapeout.com/siliwiz/)
-- [Join the community](https://tinytapeout.com/discord)
-- [Build your design locally](https://www.tinytapeout.com/guides/local-hardening/)
-
-## What next?
-
-- [Submit your design to the next shuttle](https://app.tinytapeout.com/).
-- Edit [this README](README.md) and explain your design, how it works, and how to test it.
-- Share your project on your social network of choice:
-  - LinkedIn [#tinytapeout](https://www.linkedin.com/search/results/content/?keywords=%23tinytapeout) [@TinyTapeout](https://www.linkedin.com/company/100708654/)
-  - Mastodon [#tinytapeout](https://chaos.social/tags/tinytapeout) [@matthewvenn](https://chaos.social/@matthewvenn)
-  - X (formerly Twitter) [#tinytapeout](https://twitter.com/hashtag/tinytapeout) [@tinytapeout](https://twitter.com/tinytapeout)
-  - Bluesky [@tinytapeout.com](https://bsky.app/profile/tinytapeout.com)
+Passing arithmetic simulation is not full physical sign-off. Use exact-SHA
+workflow reports to assess corners, DRC/LVS, slew, fanout and capacitance.
+Unannotated EDA power is an estimate. Silicon correctness is not claimed.

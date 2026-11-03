@@ -141,6 +141,11 @@ module tt_um_example (
     input wire ena, clk, rst_n
 );
     reg [9:0] z, x, p, r;
+    reg [9:0] q;
+    reg recursive_mode;
+    wire [10:0] predicted_sum = {1'b0, p} + {1'b0, q};
+    wire [9:0] predicted_p = predicted_sum[10] ? 10'h3ff : predicted_sum[9:0];
+    wire [9:0] prior_p = recursive_mode ? predicted_p : p;
     reg signed [10:0] delta;
     reg [10:0] s;
     reg [9:0] x_out, p_out;
@@ -184,6 +189,8 @@ module tt_um_example (
             x <= 0;
             p <= 0;
             r <= 10'd320;
+            q <= 0;
+            recursive_mode <= 0;
             delta <= 0;
             s <= 0;
             x_out <= 0;
@@ -192,17 +199,28 @@ module tt_um_example (
             state <= IDLE;
         end else begin
             if (state == IDLE && uio_in[3]) begin
-                case (uio_in[1:0])
-                    0: if (uio_in[2]) z[9:8] <= ui_in[1:0]; else z[7:0] <= ui_in;
-                    1: if (uio_in[2]) x[9:8] <= ui_in[1:0]; else x[7:0] <= ui_in;
-                    2: if (uio_in[2]) p[9:8] <= ui_in[1:0]; else p[7:0] <= ui_in;
-                    3: if (uio_in[2]) r[9:8] <= ui_in[1:0]; else r[7:0] <= ui_in;
-                endcase
+                if (uio_in[4]) begin
+                    // Extended writes never start a sample. Ordinary writes
+                    // and write=0/start=1 preserve the legacy interface.
+                    case (uio_in[1:0])
+                        0: if (uio_in[2]) q[9:8] <= ui_in[1:0]; else q[7:0] <= ui_in;
+                        1: if (!uio_in[2]) recursive_mode <= ui_in[0];
+                        default: begin end
+                    endcase
+                end else begin
+                    case (uio_in[1:0])
+                        0: if (uio_in[2]) z[9:8] <= ui_in[1:0]; else z[7:0] <= ui_in;
+                        1: if (uio_in[2]) x[9:8] <= ui_in[1:0]; else x[7:0] <= ui_in;
+                        2: if (uio_in[2]) p[9:8] <= ui_in[1:0]; else p[7:0] <= ui_in;
+                        3: if (uio_in[2]) r[9:8] <= ui_in[1:0]; else r[7:0] <= ui_in;
+                    endcase
+                end
             end
             case (state)
-                IDLE: if (uio_in[4]) begin
+                IDLE: if (uio_in[4] && !uio_in[3]) begin
                     delta <= $signed({z[9], z}) - $signed({x[9], x});
-                    s <= {1'b0, p} + {1'b0, r};
+                    s <= {1'b0, prior_p} + {1'b0, r};
+                    if (recursive_mode) p <= prior_p;
                     ready <= 0;
                     state <= DIV_START;
                 end
@@ -218,6 +236,10 @@ module tt_um_example (
                 P_START: state <= P_WAIT;
                 P_WAIT: if (mul_done) begin
                     p_out <= alu_y;
+                    if (recursive_mode) begin
+                        x <= x_out;
+                        p <= alu_y;
+                    end
                     state <= FINISH;
                 end
                 FINISH: begin

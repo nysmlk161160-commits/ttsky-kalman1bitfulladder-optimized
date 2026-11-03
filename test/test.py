@@ -4,6 +4,7 @@ from pathlib import Path
 import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import ClockCycles, FallingEdge, Timer
+from stream_model import scenarios
 
 
 async def write_value(dut, address, value):
@@ -91,9 +92,106 @@ async def test_kalman_optimized(dut):
             "passed": actual_x == expected_x and actual_p == expected_p,
         })
         (output_dir / "kalman_cases.json").write_text(json.dumps({
-            "version": "version6", "seed": 20261101,
+            "version": "version7", "seed": 20261101,
             "sampling": "ClockCycles(1), then Timer(1 ns), after Start pulse end",
             "case_count": len(case_records), "cases": case_records,
         }, indent=2), encoding="utf-8")
         assert actual_x == expected_x, (z, x, p, r, "x", actual_x, expected_x)
         assert actual_p == expected_p, (z, x, p, r, "p", actual_p, expected_p)
+
+
+@cocotb.test()
+async def test_recursive_protocol(dut):
+    """Same public-port scenarios run in RTL and in the GDS gate-level job."""
+    dut.ena.value=1
+    dut.ui_in.value=0
+    dut.uio_in.value=0
+    dut.rst_n.value=0
+    cocotb.start_soon(Clock(dut.clk,20,unit='ns').start())
+    records=[]
+    output=Path('output/recursive_cases.json')
+    output.parent.mkdir(exist_ok=True)
+
+    def save():
+        output.write_text(json.dumps({'version':'version7','case_count':len(records),
+            'sampling':'Start pulse end; rising edge + 1 ns',
+            'reset_abort_checks':1,'cases':records},indent=2),encoding='utf-8')
+
+    async def reset():
+        await FallingEdge(dut.clk)
+        dut.uio_in.value=0
+        dut.rst_n.value=0
+        await ClockCycles(dut.clk,3)
+        await FallingEdge(dut.clk)
+        dut.rst_n.value=1
+        assert int(dut.uio_out.value)&0xc0==0
+        assert int(dut.uio_oe.value)==0xc0
+
+    async def extended(addr,value):
+        for upper in (0,1):
+            await FallingEdge(dut.clk)
+            dut.ui_in.value=(value>>(8*upper))&255
+            dut.uio_in.value=addr|(upper<<2)|24
+            await FallingEdge(dut.clk)
+            dut.uio_in.value=0
+
+    async def update(row):
+        await FallingEdge(dut.clk)
+        dut.uio_in.value=16
+        await FallingEdge(dut.clk)
+        dut.uio_in.value=0
+        for cycles in range(1,51):
+            await ClockCycles(dut.clk,1)
+            await Timer(1,unit='ns')
+            if row.get('busy'):
+                if cycles==2:
+                    dut.ui_in.value=0;dut.uio_in.value=11
+                elif cycles==3:dut.uio_in.value=0
+                elif cycles==4:
+                    dut.ui_in.value=255;dut.uio_in.value=24
+                elif cycles==5:dut.uio_in.value=0
+                elif cycles==6:
+                    dut.ui_in.value=0;dut.uio_in.value=25
+                elif cycles==7:dut.uio_in.value=0
+            if int(dut.uio_out.value)&128:break
+        else:
+            save();assert False,'Recursive timeout'
+        dut.uio_in.value=0
+        ax=await read_value(dut,0);ap=await read_value(dut,1)
+        passed=ax==(row['expected_x']&1023) and ap==row['expected_p']
+        records.append({**row,'actual_x':ax,'actual_p':ap,'cycles':cycles,'passed':passed})
+        if not passed:save()
+        assert passed,records[-1]
+        # UNIT_DELAY gate simulation can expose ready one observation later.
+        assert cycles in (row['cycles'],row['cycles']+1),records[-1]
+        await ClockCycles(dut.clk,2)
+        await Timer(1,unit='ns')
+        assert int(dut.uio_out.value)&0xc0==0x80
+
+    last_q=last_r=last_mode=None
+    for row in scenarios():
+        if row['reset']:
+            await reset()
+            last_q=last_r=last_mode=None
+        if row['load']:
+            await write_value(dut,1,row['x']&1023)
+            await write_value(dut,2,row['p'])
+        if row['q']!=last_q:
+            await extended(0,row['q']);last_q=row['q']
+        if row['r']!=last_r:
+            await write_value(dut,3,row['r']);last_r=row['r']
+        if row['mode']!=last_mode:
+            await extended(1,row['mode']);last_mode=row['mode']
+        await write_value(dut,0,row['z']&1023)
+        await update(row)
+    # Reset must abort, clear Q, and restore non-feedback legacy behaviour.
+    await FallingEdge(dut.clk);dut.uio_in.value=16
+    await FallingEdge(dut.clk);dut.uio_in.value=0
+    await ClockCycles(dut.clk,4)
+    await reset()
+    for addr,value in ((0,64),(1,0),(2,64),(3,64)):
+        await write_value(dut,addr,value)
+    for _ in range(2):
+        await update({'expected_x':32,'expected_p':32,'cycles':27,
+                      'mode':0,'kind':'legacy_after_abort_reset'})
+    save()

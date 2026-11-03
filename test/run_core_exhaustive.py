@@ -12,6 +12,8 @@ def main():
     args=parser.parse_args()
     repo=Path(__file__).resolve().parent.parent
     out=(args.output or repo/'test/sim_build/core_exhaustive').resolve()
+    if out.exists() and any(out.iterdir()):
+        raise SystemExit('Output directory already contains evidence; choose a new attempt path.')
     out.mkdir(parents=True,exist_ok=True)
     start=time.monotonic()
     compiler=shutil.which('iverilog')

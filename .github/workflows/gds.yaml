@@ -37,12 +37,12 @@ jobs:
       - name: GL test
         uses: TinyTapeout/tt-gds-action/gl_test@ttsky26d
 
-      - name: Archive version5 GL case records
+      - name: Archive version7 GL case records
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: version5-gl-case-records
-          path: test/output/kalman_cases.json
+          name: version7-gl-case-records
+          path: test/output/*.json
           if-no-files-found: warn
 
   viewer:
