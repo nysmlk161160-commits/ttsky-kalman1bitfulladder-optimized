@@ -5,6 +5,10 @@ module full_adder_1bit (
     assign sum = a ^ b ^ cin;
     assign cout = (a & b) | ((a ^ b) & cin);
 endmodule
+
+
+
+
 module kalman_div1 (
     input wire clk, rst_n, start,
     input wire [9:0] p,
@@ -88,6 +92,9 @@ module kalman_div1 (
         end
     end
 endmodule
+
+
+
 module kalman_mul1 (
     input wire clk, rst_n, start,
     input wire [6:0] a,
@@ -145,6 +152,9 @@ module kalman_mul1 (
         end
     end
 endmodule
+
+
+
 module tt_um_example (
     input wire [7:0] ui_in,
     output wire [7:0] uo_out,
