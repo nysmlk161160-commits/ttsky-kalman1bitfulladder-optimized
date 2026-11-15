@@ -92,7 +92,7 @@ async def test_q4_7(d):
         rec,_=await execute(d,words);rec['case_index']=index
         rec['suite']="legacy65_same_real_inputs" if index<65 else "random1000" if index<1065 else "bit48"
         records.append(rec)
-        (out/'kalman_cases.json').write_text(json.dumps(dict(version="version11",format="Q4.7/UQ4.7",fraction_bits=8,
+        (out/'kalman_cases.json').write_text(json.dumps(dict(version="version11",format="Q4.7/UQ4.7",fraction_bits=7,
             sampling="ClockCycles(1), then Timer(1ns), after start pulse end",case_count=len(records),cases=records),indent=2),encoding='utf-8')
     protocol=[]
     def save():
