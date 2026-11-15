@@ -8,18 +8,18 @@ module full_adder_1bit (
     assign cout = (a & b) | ((a ^ b) & cin);
 endmodule
 
-module ripple_adder_12bit (
-    input wire [11:0] a, b,
+module ripple_adder_15bit (
+    input wire [14:0] a, b,
     input wire cin,
-    output wire [11:0] sum,
+    output wire [14:0] sum,
     output wire cout
 );
-    wire [12:0] c;
+    wire [15:0] c;
     assign c[0] = cin;
-    assign cout = c[12];
+    assign cout = c[15];
     genvar i;
     generate
-        for (i = 0; i < 12; i = i + 1) begin : bit_slice
+        for (i = 0; i < 15; i = i + 1) begin : bit_slice
             full_adder_1bit fa (
                 .a(a[i]), .b(b[i]), .cin(c[i]),
                 .sum(sum[i]), .cout(c[i + 1])
@@ -28,26 +28,26 @@ module ripple_adder_12bit (
     endgenerate
 endmodule
 
-module kalman_div12 (
+module kalman_div15 (
     input wire clk, rst_n, start,
-    input wire [9:0] p,
-    input wire [10:0] s,
-    output wire [6:0] result,
+    input wire [12:0] p,
+    input wire [13:0] s,
+    output wire [9:0] result,
     output reg done
 );
-    reg [10:0] remainder;
-    reg [5:0] quotient;
+    reg [13:0] remainder;
+    reg [8:0] quotient;
     reg equal_case;
-    reg [2:0] gain_index;
+    reg [3:0] gain_index;
     reg running;
     assign result = {equal_case, quotient};
 
     // The trial shift is wiring: consume one fractional quotient bit per clock.
-    wire [11:0] trial_bits = {remainder, 1'b0};
-    wire [11:0] difference;
+    wire [14:0] trial_bits = {remainder, 1'b0};
+    wire [14:0] difference;
     wire no_borrow;
-    wire [5:0] next_quotient = {quotient[4:0], no_borrow};
-    ripple_adder_12bit divider_adder (
+    wire [8:0] next_quotient = {quotient[7:0], no_borrow};
+    ripple_adder_15bit divider_adder (
         .a(trial_bits), .b(~{1'b0, s}), .cin(1'b1),
         .sum(difference), .cout(no_borrow)
     );
@@ -71,9 +71,9 @@ module kalman_div12 (
                 if (s == 0 || p == s)
                     done <= 1;
             end else if (running) begin
-                remainder <= no_borrow ? difference[10:0] : trial_bits[10:0];
+                remainder <= no_borrow ? difference[13:0] : trial_bits[13:0];
                 quotient <= next_quotient;
-                if (gain_index == 5) begin
+                if (gain_index == 8) begin
                     running <= 0;
                     done <= 1;
                 end else begin
@@ -84,26 +84,26 @@ module kalman_div12 (
     end
 endmodule
 
-module kalman_mul12 (
+module kalman_mul15 (
     input wire clk, rst_n, start,
-    input wire [6:0] a,
-    input wire signed [10:0] b,
-    output wire signed [10:0] result,
+    input wire [9:0] a,
+    input wire signed [13:0] b,
+    output wire signed [13:0] result,
     output reg done
 );
-    reg [18:0] product;
-    reg [2:0] bit_count;
+    reg [24:0] product;
+    reg [3:0] bit_count;
     reg running;
-    assign result = $signed(product[16:6]);
+    assign result = $signed(product[22:9]);
 
     // Fuse the conditional add and arithmetic shift at the register input.
     // Shift the newly computed sum, not the previous cycle's accumulator.
-    wire [11:0] sum;
+    wire [14:0] sum;
     wire unused_carry;
-    wire [11:0] multiplicand = {b[10], b};
-    wire [18:0] next_product = {sum[11], sum, product[6:1]};
-    ripple_adder_12bit multiplier_adder (
-        .a(product[18:7]), .b(multiplicand & {12{product[0]}}),
+    wire [14:0] multiplicand = {b[13], b};
+    wire [24:0] next_product = {sum[14], sum, product[9:1]};
+    ripple_adder_15bit multiplier_adder (
+        .a(product[24:10]), .b(multiplicand & {15{product[0]}}),
         .cin(1'b0), .sum(sum), .cout(unused_carry)
     );
 
@@ -116,12 +116,12 @@ module kalman_mul12 (
         end else begin
             done <= 0;
             if (start) begin
-                product <= {12'b0, a};
+                product <= {15'b0, a};
                 bit_count <= 0;
                 running <= 1;
             end else if (running) begin
                 product <= next_product;
-                if (bit_count == 6) begin
+                if (bit_count == 9) begin
                     running <= 0;
                     done <= 1;
                 end else begin
@@ -140,10 +140,10 @@ module tt_um_example (
     output wire [7:0] uio_oe,
     input wire ena, clk, rst_n
 );
-    reg [9:0] z, x, p, r;
-    reg signed [10:0] delta;
-    reg [10:0] s;
-    reg [9:0] x_out, p_out;
+    reg [12:0] z, x, p, r;
+    reg signed [13:0] delta;
+    reg [13:0] s;
+    reg [12:0] x_out, p_out;
     reg ready;
     reg [2:0] state;
 
@@ -152,29 +152,29 @@ module tt_um_example (
                P_WAIT=6, FINISH=7;
     wire div_start = (state == DIV_START);
     wire mul_start = (state == X_START || state == P_START);
-    wire [6:0] div_result;
+    wire [9:0] div_result;
     wire div_done, mul_done;
-    wire signed [10:0] mul_result;
+    wire signed [13:0] mul_result;
     // b is read live by the serial multiplier and remains stable during each run.
-    wire signed [10:0] mul_b = (state == X_START || state == X_WAIT)
+    wire signed [13:0] mul_b = (state == X_START || state == X_WAIT)
                                       ? delta : $signed({1'b0, p});
 
-    // One shared 10-bit datapath: X + (K*delta) or P - (K*P).
+    // One shared 13-bit datapath: X + (K*delta) or P - (K*P).
     wire do_sub = (state == P_WAIT);
-    wire [9:0] alu_a = do_sub ? p : x;
-    wire [9:0] alu_b = mul_result[9:0] ^ {10{do_sub}};
-    wire [9:0] alu_y = alu_a + alu_b + do_sub;
-    wire [9:0] read_result = uio_in[5] ? p_out : x_out;
+    wire [12:0] alu_a = do_sub ? p : x;
+    wire [12:0] alu_b = mul_result[12:0] ^ {13{do_sub}};
+    wire [12:0] alu_y = alu_a + alu_b + do_sub;
+    wire [12:0] read_result = uio_in[5] ? p_out : x_out;
 
-    assign uo_out = uio_in[2] ? {6'b0, read_result[9:8]} : read_result[7:0];
+    assign uo_out = uio_in[2] ? {3'b0, read_result[12:8]} : read_result[7:0];
     assign uio_out = {ready, (state != IDLE), 6'b0};
     assign uio_oe = 8'b11000000;
-    kalman_div12 divider (
+    kalman_div15 divider (
         .clk(clk), .rst_n(rst_n), .start(div_start),
         .p(p), .s(s), .result(div_result), .done(div_done)
     );
 
-    kalman_mul12 multiplier (
+    kalman_mul15 multiplier (
         .clk(clk), .rst_n(rst_n), .start(mul_start),
         .a(div_result), .b(mul_b), .result(mul_result), .done(mul_done)
     );
@@ -183,7 +183,7 @@ module tt_um_example (
             z <= 0;
             x <= 0;
             p <= 0;
-            r <= 10'd320;
+            r <= 13'd2560;
             delta <= 0;
             s <= 0;
             x_out <= 0;
@@ -193,15 +193,15 @@ module tt_um_example (
         end else begin
             if (state == IDLE && uio_in[3]) begin
                 case (uio_in[1:0])
-                    0: if (uio_in[2]) z[9:8] <= ui_in[1:0]; else z[7:0] <= ui_in;
-                    1: if (uio_in[2]) x[9:8] <= ui_in[1:0]; else x[7:0] <= ui_in;
-                    2: if (uio_in[2]) p[9:8] <= ui_in[1:0]; else p[7:0] <= ui_in;
-                    3: if (uio_in[2]) r[9:8] <= ui_in[1:0]; else r[7:0] <= ui_in;
+                    0: if (uio_in[2]) z[12:8] <= ui_in[4:0]; else z[7:0] <= ui_in;
+                    1: if (uio_in[2]) x[12:8] <= ui_in[4:0]; else x[7:0] <= ui_in;
+                    2: if (uio_in[2]) p[12:8] <= ui_in[4:0]; else p[7:0] <= ui_in;
+                    3: if (uio_in[2]) r[12:8] <= ui_in[4:0]; else r[7:0] <= ui_in;
                 endcase
             end
             case (state)
                 IDLE: if (uio_in[4]) begin
-                    delta <= $signed({z[9], z}) - $signed({x[9], x});
+                    delta <= $signed({z[12], z}) - $signed({x[12], x});
                     s <= {1'b0, p} + {1'b0, r};
                     ready <= 0;
                     state <= DIV_START;
