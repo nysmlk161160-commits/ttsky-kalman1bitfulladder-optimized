@@ -1,9 +1,9 @@
-"""Run independent integer-reference interface tests with Icarus, without make.
+"""Q4.8 public-interface integer reference; 65 scaled legacy +1000 random +48 bit cases.
 
 Usage from the repository root:
     python test/run_digit_serial.py
 To verify the original baseline using the exact same vectors and observer:
-    python test/run_digit_serial.py --rtl ../kalman-baseline/src/project.v --baseline
+    python test/run_digit_serial.py --output ../results/version10/raw/local/interface_ATTEMPT
 
 Uses the original 15 directed + 50 random cases, followed by 1,000 extra
 seeded random cases. Test output belongs in the already-ignored sim_build.
@@ -31,17 +31,24 @@ def vectors():
     for _ in range(50):
         cases.append((rng.randrange(-512, 512), rng.randrange(-512, 512),
                       rng.randrange(1024), rng.randrange(1024)))
+    cases = [tuple(4*v for v in row) for row in cases]
     rng = random.Random(20261102)
     for _ in range(1000):
-        cases.append((rng.randrange(-512, 512), rng.randrange(-512, 512),
-                      rng.randrange(1024), rng.randrange(1024)))
+        cases.append((rng.randrange(-2048, 2048), rng.randrange(-2048, 2048),
+                      rng.randrange(4096), rng.randrange(4096)))
+    for address in range(4):
+        for bit in range(12):
+            row = [0,0,0,0]
+            row[address] = 1 << bit
+            if address < 2 and bit == 11: row[address] = -2048
+            cases.append(tuple(row))
     return cases
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--rtl', type=Path)
-    parser.add_argument('--baseline', action='store_true')
+
     parser.add_argument('--output', type=Path,
                         help='Preserve raw local replay outside the source repository')
     args = parser.parse_args()
@@ -51,18 +58,18 @@ def main():
     if not iverilog:
         raise SystemExit('iverilog is not on PATH. Install Icarus Verilog first.')
     vvp = shutil.which('vvp') or str(Path(iverilog).with_name('vvp.exe'))
-    label = 'baseline' if args.baseline else 'fused'
+    label = 'q4_8'
     out = (args.output or repo / 'test/sim_build/digit_serial' / label).resolve()
     out.mkdir(parents=True, exist_ok=True)
     cases = vectors()
     lines = []
     for z, x, p, r in cases:
-        k = (p << 6) // (p + r) if p + r else 0
-        expected_x = (x + ((k * (z - x)) >> 6)) & 1023
-        expected_p = (p - ((k * p) >> 6)) & 1023
+        k = (p << 8) // (p + r) if p + r else 0
+        expected_x = (x + ((k * (z - x)) >> 8)) & 4095
+        expected_p = (p - ((k * p) >> 8)) & 4095
         lines.append(f'{z} {x} {p} {r} {expected_x} {expected_p}')
     (out / 'vectors.txt').write_text('\n'.join(lines) + '\n', encoding='ascii')
-    normal, shortcut = (267, 189) if args.baseline else (27, 21)
+    normal, shortcut = (33, 25)
     subprocess.run([iverilog, '-g2012', '-Wall', '-s', 'tb_digit_serial',
                     '-o', str(out / 'sim.vvp'), str(rtl),
                     str(repo / 'test/tb_digit_serial.v')], check=True)
@@ -75,7 +82,7 @@ def main():
     if result.returncode or 'PASS:' not in result.stdout:
         raise SystemExit(result.returncode or 1)
     record = {'rtl': str(rtl), 'cases': len(cases), 'original_cases': 65,
-              'additional_random_cases': 1000, 'clock_period_ns': 20,
+              'additional_random_cases': 1000, 'bit_observability_cases': 48, 'clock_period_ns': 20,
               'normal_cycles': normal, 'shortcut_cycles': shortcut,
               'passed': True, 'simulator': iverilog,
               'observation': 'Start pulse end to ready, rising edge + 1 ns'}

@@ -23,7 +23,7 @@ module tb_digit_serial;
 
     task write_value;
         input [1:0] address;
-        input [9:0] value;
+        input [11:0] value;
         integer upper;
         begin
             for (upper = 0; upper < 2; upper = upper + 1) begin
@@ -45,7 +45,7 @@ module tb_digit_serial;
             value = uo_out;
             uio_in = (select_p << 5) | 4;
             #1;
-            value = value | ((uo_out & 3) << 8);
+            value = value | ((uo_out & 15) << 8);
         end
     endtask
 
@@ -67,10 +67,10 @@ module tb_digit_serial;
         while (!$feof(fd)) begin
             scan = $fscanf(fd, "%d %d %d %d %d %d\n", z, x, p, r, expected_x, expected_p);
             if (scan != 6) $fatal(1, "Invalid vector at index %0d", case_index);
-            write_value(0, z[9:0]);
-            write_value(1, x[9:0]);
-            write_value(2, p[9:0]);
-            write_value(3, r[9:0]);
+            write_value(0, z[11:0]);
+            write_value(1, x[11:0]);
+            write_value(2, p[11:0]);
+            write_value(3, r[11:0]);
             @(negedge clk);
             uio_in = 16;
             @(negedge clk);

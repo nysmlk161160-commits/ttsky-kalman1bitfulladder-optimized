@@ -27,7 +27,7 @@ def main():
     log=result.stdout+result.stderr
     (out/'simulation.log').write_text(log,encoding='utf-8')
     passed=result.returncode==0 and 'PASS: exhaustive' in log
-    record={'passed':passed,'divider_vectors':1048576,'multiplier_vectors':133120,
+    record={'passed':passed,'divider_vectors':16777216,'multiplier_vectors':2105344,
             'elapsed_seconds':time.monotonic()-start,'stage':'local_RTL',
             'limitations':'Exhaustive arithmetic-domain simulation; not a formal proof of all interface histories.'}
     (out/'result.json').write_text(json.dumps(record,indent=2),encoding='utf-8')
