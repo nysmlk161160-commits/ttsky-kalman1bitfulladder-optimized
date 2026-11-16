@@ -132,6 +132,122 @@ module kalman_mul12 (
     end
 endmodule
 
+// Q4.6 scratch storage experiment: two arithmetic paths, original handshakes.
+// Only storage is overlaid: DIV owns {S, remainder}; MUL owns work[17:0].
+module kalman_shared_work12 (
+    input wire clk, rst_n,
+    input wire capture_s,
+    input wire [10:0] s_next,
+    input wire div_start, mul_start,
+    input wire [9:0] p,
+    input wire signed [10:0] b,
+    output wire [6:0] div_result,
+    output reg div_done,
+    output wire signed [10:0] mul_result,
+    output reg mul_done
+);
+    reg [21:0] work;
+    wire [10:0] denominator = work[21:11];
+    wire [10:0] remainder = work[10:0];
+    // Original product[18] == product[17] after reset, load and every step.
+    // Represent that already-synthesized redundancy as wiring, not a new FF.
+    wire [18:0] product = {work[17], work[17:0]};
+    reg [5:0] quotient;
+    reg equal_case;
+    reg [2:0] gain_index;
+    reg div_running;
+    reg [2:0] bit_count;
+    reg mul_running;
+    assign div_result = {equal_case, quotient};
+    assign mul_result = $signed(product[16:6]);
+
+    wire [11:0] trial_bits = {remainder, 1'b0};
+    wire [11:0] difference;
+    wire no_borrow;
+    wire [5:0] next_quotient = {quotient[4:0], no_borrow};
+    ripple_adder_12bit divider_adder (
+        .a(trial_bits), .b(~{1'b0, denominator}), .cin(1'b1),
+        .sum(difference), .cout(no_borrow)
+    );
+    wire [11:0] sum;
+    wire unused_carry;
+    wire [11:0] multiplicand = {b[10], b};
+    wire [18:0] next_product = {sum[11], sum, product[6:1]};
+    ripple_adder_12bit multiplier_adder (
+        .a(product[18:7]), .b(multiplicand & {12{product[0]}}),
+        .cin(1'b0), .sum(sum), .cout(unused_carry)
+    );
+
+    // The original top-level schedule makes DIV and MUL ownership exclusive.
+    // capture_s samples OLD P/R on the accepted-start edge; DIV loads live P
+    // one edge later, preserving simultaneous-write/start behavior exactly.
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            work <= 0;
+        end else begin
+            if (capture_s)
+                work[21:11] <= s_next;
+            if (div_start)
+                work[10:0] <= {1'b0, p};
+            else if (div_running)
+                work[10:0] <= no_borrow ? difference[10:0] : trial_bits[10:0];
+            if (mul_start)
+                work[17:0] <= {11'b0, div_result};
+            else if (mul_running)
+                work[17:0] <= next_product[17:0];
+        end
+    end
+
+    // Retain both counters and both running/done pairs for attribution.
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            quotient <= 0;
+            equal_case <= 0;
+            gain_index <= 0;
+            div_running <= 0;
+            div_done <= 0;
+        end else begin
+            div_done <= 0;
+            if (div_start) begin
+                quotient <= 0;
+                equal_case <= (denominator != 0 && p == denominator);
+                gain_index <= 0;
+                div_running <= (denominator != 0 && p != denominator);
+                if (denominator == 0 || p == denominator)
+                    div_done <= 1;
+            end else if (div_running) begin
+                quotient <= next_quotient;
+                if (gain_index == 5) begin
+                    div_running <= 0;
+                    div_done <= 1;
+                end else begin
+                    gain_index <= gain_index + 1'b1;
+                end
+            end
+        end
+    end
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            bit_count <= 0;
+            mul_running <= 0;
+            mul_done <= 0;
+        end else begin
+            mul_done <= 0;
+            if (mul_start) begin
+                bit_count <= 0;
+                mul_running <= 1;
+            end else if (mul_running) begin
+                if (bit_count == 6) begin
+                    mul_running <= 0;
+                    mul_done <= 1;
+                end else begin
+                    bit_count <= bit_count + 1'b1;
+                end
+            end
+        end
+    end
+endmodule
+
 module tt_um_example (
     input wire [7:0] ui_in,
     output wire [7:0] uo_out,
@@ -142,7 +258,6 @@ module tt_um_example (
 );
     reg [9:0] z, x, p, r;
     reg signed [10:0] delta;
-    reg [10:0] s;
     reg [9:0] x_out, p_out;
     reg ready;
     reg [2:0] state;
@@ -169,14 +284,13 @@ module tt_um_example (
     assign uo_out = uio_in[2] ? {6'b0, read_result[9:8]} : read_result[7:0];
     assign uio_out = {ready, (state != IDLE), 6'b0};
     assign uio_oe = 8'b11000000;
-    kalman_div12 divider (
-        .clk(clk), .rst_n(rst_n), .start(div_start),
-        .p(p), .s(s), .result(div_result), .done(div_done)
-    );
-
-    kalman_mul12 multiplier (
-        .clk(clk), .rst_n(rst_n), .start(mul_start),
-        .a(div_result), .b(mul_b), .result(mul_result), .done(mul_done)
+    wire capture_s = (state == IDLE && uio_in[4]);
+    wire [10:0] s_next = {1'b0, p} + {1'b0, r};
+    kalman_shared_work12 shared_work (
+        .clk(clk), .rst_n(rst_n), .capture_s(capture_s), .s_next(s_next),
+        .div_start(div_start), .mul_start(mul_start), .p(p), .b(mul_b),
+        .div_result(div_result), .div_done(div_done),
+        .mul_result(mul_result), .mul_done(mul_done)
     );
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
@@ -185,7 +299,6 @@ module tt_um_example (
             p <= 0;
             r <= 10'd320;
             delta <= 0;
-            s <= 0;
             x_out <= 0;
             p_out <= 0;
             ready <= 0;
@@ -202,7 +315,6 @@ module tt_um_example (
             case (state)
                 IDLE: if (uio_in[4]) begin
                     delta <= $signed({z[9], z}) - $signed({x[9], x});
-                    s <= {1'b0, p} + {1'b0, r};
                     ready <= 0;
                     state <= DIV_START;
                 end
