@@ -77,6 +77,12 @@ require {[llength [input_terms $root_net]] == 2} "Root fanout must be two after 
 puts $report "Final root fanout: 2; branch fanouts: 8,8; limit remains 10"
 close $report
 
+# The TT macro uses VDD_PIN/GND_PIN as its actual supply net names. Generic
+# OpenROADStep does not derive VDD_NET/GND_NET as the standard resizer step does.
+set ::env(VDD_NET) $::env(VDD_PIN)
+set ::env(GND_NET) $::env(GND_PIN)
+require {[$block findNet $::env(VDD_NET)] ne "NULL"} "Expected existing VPWR supply."
+require {[$block findNet $::env(GND_NET)] ne "NULL"} "Expected existing VGND supply."
 source $::env(SCRIPTS_DIR)/openroad/common/set_global_connections.tcl
 set_global_connections
 estimate_parasitics -placement
