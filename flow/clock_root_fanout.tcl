@@ -87,6 +87,10 @@ require {[$data_driver swapMaster $stronger]} "Data-driver master swap failed."
 puts $report "Observed data-net closure: _1358_ a211oi_2 -> a211oi_4; Boolean function/pin names unchanged."
 close $report
 
+# Keep the v21 clock repair intact; give the ui_in[2] data net fanout headroom
+# before downstream antenna insertion and standard setup/hold repair.
+source [file join [file dirname [info script]] input4_fanout.tcl]
+
 # The TT macro uses VDD_PIN/GND_PIN as its actual supply net names. Generic
 # OpenROADStep does not derive VDD_NET/GND_NET as the standard resizer step does.
 set ::env(VDD_NET) $::env(VDD_PIN)

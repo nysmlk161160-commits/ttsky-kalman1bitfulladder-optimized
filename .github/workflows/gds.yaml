@@ -19,14 +19,14 @@ jobs:
           pdk: sky130A
           tools-ref: 9d13ff3e3e6202090740110438c6a10c1d62ca0f
 
-      - name: Require zero final fanout and verify split clock branches
+      - name: Require zero final electrical violations and verify clock and input4 branches
         run: python flow/verify_clock_fanout.py
 
       - name: Preserve clock-fanout acceptance record
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: version21-fanout-acceptance
+          name: version22-fanout-acceptance
           path: runs/wokwi/fanout_acceptance.json
           if-no-files-found: warn
 
@@ -49,11 +49,11 @@ jobs:
       - name: GL test
         uses: TinyTapeout/tt-gds-action/gl_test@ttsky26d
 
-      - name: Archive version21 GL case records
+      - name: Archive version22 GL case records
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: version21-gl-case-records
+          name: version22-gl-case-records
           path: test/output/*.json
           if-no-files-found: warn
 
