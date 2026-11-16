@@ -14,9 +14,21 @@ jobs:
           submodules: recursive
 
       - name: Build GDS
-        uses: TinyTapeout/tt-gds-action@ttsky26d
+        uses: TinyTapeout/tt-gds-action@395eedb3eeec3c2f4961c3b04ff2cf87f5525636
         with:
           pdk: sky130A
+          tools-ref: 9d13ff3e3e6202090740110438c6a10c1d62ca0f
+
+      - name: Require zero final fanout and verify split clock branches
+        run: python flow/verify_clock_fanout.py
+
+      - name: Preserve clock-fanout acceptance record
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: version21-fanout-acceptance
+          path: runs/wokwi/fanout_acceptance.json
+          if-no-files-found: warn
 
   precheck:
     needs: gds
@@ -37,11 +49,11 @@ jobs:
       - name: GL test
         uses: TinyTapeout/tt-gds-action/gl_test@ttsky26d
 
-      - name: Archive version20 GL case records
+      - name: Archive version21 GL case records
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: version20-gl-case-records
+          name: version21-gl-case-records
           path: test/output/*.json
           if-no-files-found: warn
 
