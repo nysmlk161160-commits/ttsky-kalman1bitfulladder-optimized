@@ -75,6 +75,16 @@ for {set group 0} {$group < 2} {incr group} {
 }
 require {[llength [input_terms $root_net]] == 2} "Root fanout must be two after split."
 puts $report "Final root fanout: 2; branch fanouts: 8,8; limit remains 10"
+# The first completed routed attempt exposed a single overloaded data net:
+# a211oi_2 _1358_/Y -> three loads, max_ss cap .059809pF > .052195pF.
+# Keep its Boolean function/pins, and select the available stronger _4 master.
+set data_driver [$block findInst _1358_]
+require {$data_driver ne "NULL"} "Expected the observed data-net driver _1358_."
+require {[[$data_driver getMaster] getName] eq "sky130_fd_sc_hd__a211oi_2"} "Unexpected data-driver master."
+set stronger [[ord::get_db] findMaster sky130_fd_sc_hd__a211oi_4]
+require {$stronger ne "NULL"} "The stronger compatible a211oi_4 master is unavailable."
+require {[$data_driver swapMaster $stronger]} "Data-driver master swap failed."
+puts $report "Observed data-net closure: _1358_ a211oi_2 -> a211oi_4; Boolean function/pin names unchanged."
 close $report
 
 # The TT macro uses VDD_PIN/GND_PIN as its actual supply net names. Generic
