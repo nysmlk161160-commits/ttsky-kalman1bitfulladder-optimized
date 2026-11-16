@@ -134,6 +134,6 @@ async def test_public_storage_trace(d):
             assert actual==expected[i],(i,tag,hex(actual),hex(expected[i]))
     finally:
         (out/'public_trace_cases.json').write_text(json.dumps(dict(version=VERSION,cycles=len(records),seed=SEED,
-            golden_commit='3269b76ca0bca967606157de934c40d5d1ffa813',
+            golden_commit='364c52d1b72f4f0ec7db6360e24cceffe370c8cf',
             sampling='5ns after rising edge; stimulus at prior falling edge; compare all three public output buses',
             cases=records),indent=2),encoding='utf-8')

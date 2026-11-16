@@ -42,7 +42,7 @@ def main():
     repo=Path(__file__).resolve().parent.parent;out=(a.output or repo/'test/sim_build/public_trace').resolve();out.mkdir(parents=True,exist_ok=True)
     rows=vectors();(out/'stimulus.txt').write_text(''.join(' '.join(map(str,r[:4]))+'\n' for r in rows),encoding='ascii')
     (out/'tb_public_trace.v').write_text(TB,encoding='utf-8')
-    c=subprocess.run([shutil.which('iverilog'),'-g2012','-s','tb_public_trace','-o',str(out/'sim.vvp'),str(repo/'src/project.v'),str(repo/'test/golden_q4_6.v'),str(out/'tb_public_trace.v')],capture_output=True,text=True,timeout=30)
+    c=subprocess.run([shutil.which('iverilog'),'-g2012','-s','tb_public_trace','-o',str(out/'sim.vvp'),str(repo/'src/project.v'),str(repo/'test/golden_q4_10.v'),str(out/'tb_public_trace.v')],capture_output=True,text=True,timeout=30)
     (out/'compile.log').write_text(c.stdout+c.stderr,encoding='utf-8');c.check_returncode()
     r=subprocess.run([shutil.which('vvp'),'sim.vvp'],cwd=out,capture_output=True,text=True,timeout=60)
     (out/'simulation.log').write_text(r.stdout+r.stderr,encoding='utf-8')
@@ -53,7 +53,7 @@ def main():
         expected=int(exp,16);actual=int(actual,16);states[state]+=1;selectors[state].add(((rows[i][3]>>5)&1)*2+((rows[i][3]>>2)&1))
         records.append(dict(index=i,inputs=rows[i][:4],tag=rows[i][4],golden_state=state,expected=expected,actual=actual,passed=actual==expected))
     passed=r.returncode==0 and len(records)==CYCLES and all(x['passed'] for x in records)
-    data=dict(version='version19',origin='local RTL golden miter, not workflow GL',golden_commit='3269b76ca0bca967606157de934c40d5d1ffa813',
+    data=dict(version='version20',origin='local RTL golden miter, not workflow GL',golden_commit='364c52d1b72f4f0ec7db6360e24cceffe370c8cf',
         cycles=len(records),passing=sum(x['passed'] for x in records),passed=passed,seed=SEED,
         state_coverage=dict(states),read_selectors_by_state={str(k):sorted(v) for k,v in selectors.items()},
         work_ownership_and_live_data_assertions=True,records=records)
