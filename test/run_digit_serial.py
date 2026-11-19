@@ -1,7 +1,26 @@
 """Finite public-interface vectors and independent Python arithmetic reference."""
 from pathlib import Path
 import argparse,json,random,shutil,subprocess
-from format_config import W,F,SCALE,MASK,SIGN,NORMAL,SHORTCUT,VERSION,FORMAT
+from format_config import W,F,SCALE,GAIN_F,MASK,SIGN,NORMAL,SHORTCUT,VERSION,FORMAT
+
+Q59_DIRECTED = (
+    (12*SCALE, 0, SCALE, 5*SCALE),
+    (-12*SCALE, 0, SCALE, 5*SCALE),
+    (12*SCALE, -12*SCALE, SCALE, SCALE),
+    (-12*SCALE, 12*SCALE, SCALE, SCALE),
+    (8*SCALE, 0, SCALE, SCALE),
+    (-8*SCALE-1, 0, SCALE, SCALE),
+    (SIGN-1, -SIGN, SCALE, SCALE),
+    (-SIGN, SIGN-1, SCALE, SCALE),
+    (SIGN-1, -SIGN, MASK, 0),
+    (-SIGN, SIGN-1, MASK, 0),
+    (SIGN-1, -SIGN, 0, MASK),
+    (SIGN-1, -SIGN, MASK, MASK),
+    (3*SCALE//2, 0, 26, 26),
+    (-3*SCALE//2, 0, 26, 26),
+    (12*SCALE, -12*SCALE, 0, 0),
+    (12*SCALE, -12*SCALE, 1, MASK),
+)
 
 def legacy65():
     rows=[(96,0,64,320),(-96,0,64,320),(0,64,64,0),(32,-64,32,32),
@@ -28,11 +47,11 @@ def vectors():
         for bit in range(W):
             row=[0,0,0,0];row[address]=-SIGN if address<2 and bit==W-1 else 1<<bit
             rows.append(tuple(row))
-    return rows
+    return rows + list(Q59_DIRECTED)
 
 def simple_reference(words):
-    z,x,p,r=words;k=(p<<F)//(p+r) if p+r else 0
-    return ((x+((k*(z-x))>>F))&MASK,(p-((k*p)>>F))&MASK)
+    z,x,p,r=words;k=(p<<GAIN_F)//(p+r) if p+r else 0
+    return ((x+((k*(z-x))>>GAIN_F))&MASK,(p-((k*p)>>GAIN_F))&MASK)
 
 def main():
     p=argparse.ArgumentParser();p.add_argument('--output',type=Path);p.add_argument('--rtl',type=Path);a=p.parse_args()
@@ -45,7 +64,8 @@ def main():
     (out/'simulation.log').write_text(r.stdout+r.stderr,encoding='utf-8')
     passed=r.returncode==0 and 'PASS:' in r.stdout
     (out/'result.json').write_text(json.dumps(dict(version=VERSION,format=FORMAT,cases=len(cases),common_Q3_5_grid_cases=65,
-        legacy65_encoded_or_clipped_cases=65 if F>=6 else 0,additional_random_cases=1000,bit_cases=4*W,normal_cycles=NORMAL,
+        legacy65_encoded_or_clipped_cases=65 if F>=6 else 0,additional_random_cases=1000,bit_cases=4*W,
+        q5_9_directed_cases=len(Q59_DIRECTED),gain_fraction_bits=GAIN_F,normal_cycles=NORMAL,
         shortcut_cycles=SHORTCUT,passed=passed,kind='bounded interface replay, not exhaustive'),indent=2),encoding='utf-8')
     print(r.stdout+r.stderr,end='')
     if not passed:raise SystemExit(r.returncode or 1)

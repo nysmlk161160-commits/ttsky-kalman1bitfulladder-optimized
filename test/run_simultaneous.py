@@ -1,18 +1,18 @@
 """Exactly 25 public-port simultaneous write/start histories."""
 from pathlib import Path
 import argparse,json,shutil,subprocess
-from format_config import W,F,SCALE,MASK,SIGN,HIGH_MASK,NORMAL,SHORTCUT,VERSION,FORMAT
+from format_config import W,GAIN_F,GAIN_SCALE,MASK,SIGN,HIGH_MASK,NORMAL,SHORTCUT,VERSION,FORMAT
 
 def expected(old,new):
     z,x,p,r=old;_,xn,pn,_=new;s=p+r
     if s==0:g=0
-    elif pn==s:g=SCALE
+    elif pn==s:g=GAIN_SCALE
     else:
         rem=pn;g=0
-        for _ in range(F):
+        for _ in range(GAIN_F):
             trial=rem*2;take=trial>=s
-            rem=(trial-s if take else trial)&((1<<(W+1))-1);g=((g<<1)|int(take))&(SCALE-1)
-    return ((xn+((g*(z-x))>>F))&MASK,(pn-((g*pn)>>F))&MASK,SHORTCUT if s==0 or pn==s else NORMAL)
+            rem=(trial-s if take else trial)&((1<<(W+1))-1);g=((g<<1)|int(take))&(GAIN_SCALE-1)
+    return ((xn+((g*(z-x))>>GAIN_F))&MASK,(pn-((g*pn)>>GAIN_F))&MASK,SHORTCUT if s==0 or pn==s else NORMAL)
 
 def main():
     p=argparse.ArgumentParser();p.add_argument('--output',type=Path);args=p.parse_args();repo=Path(__file__).resolve().parent.parent

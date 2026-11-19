@@ -296,7 +296,7 @@ module tt_um_example (
             z <= 0;
             x <= 0;
             p <= 0;
-            r <= 14'd5120;
+            r <= 14'd2560; // 5.0 in UQ5.9. Gain arithmetic still uses 10 fractional bits.
             delta <= 0;
             x_out <= 0;
             p_out <= 0;

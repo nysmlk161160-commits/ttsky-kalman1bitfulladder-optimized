@@ -1,12 +1,14 @@
 # Numeric format constants; no algorithm or FSM changes.
 W=14
-F=10
+F=9
 SCALE=1<<F
+GAIN_F=10
+GAIN_SCALE=1<<GAIN_F
 MASK=(1<<W)-1
 SIGN=1<<(W-1)
 HIGH_MASK=(1<<(W-8))-1
 HIGH_UNUSED=255^HIGH_MASK
-NORMAL=3*F+9
-SHORTCUT=2*F+9
-VERSION='version20'
-FORMAT='Q4.10'
+NORMAL=3*GAIN_F+9
+SHORTCUT=2*GAIN_F+9
+VERSION='version24'
+FORMAT='Q5.9'

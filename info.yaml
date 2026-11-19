@@ -1,8 +1,8 @@
 project:
-  title: "Kalman Version6 Fused Arithmetic"
+  title: "Kalman v24 Q5.9"
   author: "Student"
   discord: ""
-  description: "Version6: fused-cycle Kalman correction, preserving baseline precision and I/O"
+  description: "14-bit Q5.9 Kalman correction with 10 fractional gain bits"
   language: "Verilog"
   clock_hz: 50000000
   tiles: "1x1"

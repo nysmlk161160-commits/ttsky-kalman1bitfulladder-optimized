@@ -1,6 +1,6 @@
 """Fixed 4096-cycle public stimulus, including output reads throughout busy."""
 import random
-from format_config import W,F,MASK,SIGN,NORMAL
+from format_config import W,GAIN_F,MASK,SIGN,NORMAL
 SEED=20261116
 CYCLES=4096
 
@@ -33,7 +33,7 @@ def vectors():
             emit(ui=byte,uio=16|8|a|(hi<<2),tag='simultaneous write/start')
         elif t==24:emit(ui=0,uio=16|8|3,tag='old R/new R counterexample')
         else:emit(uio=16|selector(t),tag='repeat start' if t in (28,29,30,31) else 'ordinary start')
-        abort=(2,F+4,2*F+5,3*F+5)[t%4] if t>=36 else None
+        abort=(2,GAIN_F+4,2*GAIN_F+5,3*GAIN_F+5)[t%4] if t>=36 else None
         for j in range(NORMAL+9):
             ctl=selector(j+t)
             if j in (2,4) and t%3==0:ctl|=8|16|3

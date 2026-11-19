@@ -3,7 +3,7 @@ from pathlib import Path
 import json,cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import ClockCycles,FallingEdge,Timer
-from format_config import W,F,SCALE,MASK,SIGN,HIGH_MASK,HIGH_UNUSED,NORMAL,SHORTCUT,VERSION,FORMAT
+from format_config import W,F,SCALE,GAIN_F,GAIN_SCALE,MASK,SIGN,HIGH_MASK,HIGH_UNUSED,NORMAL,SHORTCUT,VERSION,FORMAT
 from run_digit_serial import vectors,simple_reference
 
 def signed(v):
@@ -14,14 +14,14 @@ def reference(old,new=None):
     # Original nonblocking history: capture old delta/S, then use live P and X.
     new=old if new is None else new;z,x,p,r=old;_,xn,pn,_=new;s=p+r
     if s==0:g=0
-    elif pn==s:g=SCALE
+    elif pn==s:g=GAIN_SCALE
     else:
         rem=pn;g=0
-        for _ in range(F):
+        for _ in range(GAIN_F):
             trial=rem*2;take=trial>=s
             rem=(trial-s if take else trial)&((1<<(W+1))-1)
-            g=((g<<1)|int(take))&(SCALE-1)
-    return ((xn+((g*(z-x))>>F))&MASK,(pn-((g*pn)>>F))&MASK,SHORTCUT if s==0 or pn==s else NORMAL)
+            g=((g<<1)|int(take))&(GAIN_SCALE-1)
+    return ((xn+((g*(z-x))>>GAIN_F))&MASK,(pn-((g*pn)>>GAIN_F))&MASK,SHORTCUT if s==0 or pn==s else NORMAL)
 
 def histories():
     return [((min(200,SIGN-1),max(-100,-SIGN),0,1),0),((-SIGN,SIGN-1,MASK,0),255),
@@ -80,9 +80,9 @@ async def test_format(d):
     out=Path('output');out.mkdir(exist_ok=True);records=[]
     for index,words in enumerate(vectors()):
         rec,_=await execute(d,words);rec['case_index']=index
-        rec['suite']='common_Q3_5_grid65' if index<65 else 'legacy65_encoded_or_clipped' if F>=6 and index<130 else 'bounded_random_or_bit'
+        rec['suite']='common_Q3_5_grid65' if index<65 else 'legacy65_encoded_or_clipped' if index<130 else 'bounded_random_or_bit' if index<1130+4*W else 'q5_9_directed'
         records.append(rec)
-        (out/'kalman_cases.json').write_text(json.dumps(dict(version=VERSION,format=FORMAT,fraction_bits=F,data_bits=W,
+        (out/'kalman_cases.json').write_text(json.dumps(dict(version=VERSION,format=FORMAT,fraction_bits=F,gain_fraction_bits=GAIN_F,data_bits=W,
             sampling='ClockCycles(1), Timer(1ns), after start pulse end',case_count=len(records),cases=records),indent=2),encoding='utf-8')
     protocol=[]
     def save():
@@ -102,7 +102,7 @@ async def test_format(d):
     rec,_=await execute(d,words,write=False);protocol.append(dict(name='repeat start retained X/P inputs',**rec));save()
     rec,_=await execute(d,(-SIGN,SIGN-1,MASK,MASK),poison_upper=True)
     protocol.append(dict(name='upper write mask and zeroed readback',**rec));save()
-    for delay in (2,F+5,2*F+9):
+    for delay in (2,GAIN_F+5,2*GAIN_F+9):
         for a,v in enumerate(words):await write_value(d,a,v)
         await FallingEdge(d.clk);d.uio_in.value=16
         await FallingEdge(d.clk);d.uio_in.value=0
@@ -121,7 +121,7 @@ async def test_public_storage_trace(d):
     from cocotb.triggers import RisingEdge
     d.ena.value=1;d.ui_in.value=0;d.uio_in.value=0;d.rst_n.value=0
     cocotb.start_soon(Clock(d.clk,20,unit='ns').start())
-    expected=[int(x,16) for x in Path('public_trace_expected.hex').read_text(encoding='ascii').splitlines()]
+    expected=[int(x,16) for x in Path('public_trace_expected_q5_9.hex').read_text(encoding='ascii').splitlines()]
     stimuli=vectors();assert len(expected)==len(stimuli)==CYCLES
     records=[];out=Path('output');out.mkdir(exist_ok=True)
     try:
