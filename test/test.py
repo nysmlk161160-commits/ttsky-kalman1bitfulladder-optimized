@@ -3,7 +3,7 @@ from pathlib import Path
 import json,cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import ClockCycles,FallingEdge,Timer
-from format_config import W,F,SCALE,GAIN_F,GAIN_SCALE,MASK,SIGN,HIGH_MASK,HIGH_UNUSED,NORMAL,SHORTCUT,VERSION,FORMAT
+from format_config import W,F,SCALE,GAIN_F,GAIN_SCALE,MASK,SIGN,HIGH_MASK,HIGH_UNUSED,NORMAL,SHORTCUT,SIM_CLOCK_PS,VERSION,FORMAT
 from run_digit_serial import vectors,simple_reference
 
 def signed(v):
@@ -69,13 +69,13 @@ async def execute(d,words,write=True,simul=None,inject=False,poison_upper=False)
     assert cycles in (arch,arch+1),cycles
     assert int(d.uio_out.value)&64==0
     return dict(z=words[0],x=words[1],p=words[2],r=words[3],accepted_input_words=words,post_write_words=new,
-        expected_x=ex,expected_p=ep,actual_x=ax,actual_p=ap,cycles=cycles,clock_period_ns=20,
+        expected_x=ex,expected_p=ep,actual_x=ax,actual_p=ap,cycles=cycles,clock_period_ns=SIM_CLOCK_PS/1000,
         path='normal' if arch==NORMAL else 'shortcut',passed=True),new
 
 @cocotb.test()
 async def test_format(d):
     d.ena.value=1;d.ui_in.value=0;d.uio_in.value=0;d.rst_n.value=0
-    cocotb.start_soon(Clock(d.clk,20,unit='ns').start());await reset(d)
+    cocotb.start_soon(Clock(d.clk,SIM_CLOCK_PS,unit='ps').start());await reset(d)
     assert int(d.uio_oe.value)==192
     out=Path('output');out.mkdir(exist_ok=True);records=[]
     for index,words in enumerate(vectors()):
@@ -120,7 +120,7 @@ async def test_public_storage_trace(d):
     from public_trace_vectors import vectors,CYCLES,SEED
     from cocotb.triggers import RisingEdge
     d.ena.value=1;d.ui_in.value=0;d.uio_in.value=0;d.rst_n.value=0
-    cocotb.start_soon(Clock(d.clk,20,unit='ns').start())
+    cocotb.start_soon(Clock(d.clk,SIM_CLOCK_PS,unit='ps').start())
     expected=[int(x,16) for x in Path('public_trace_expected_q5_9.hex').read_text(encoding='ascii').splitlines()]
     stimuli=vectors();assert len(expected)==len(stimuli)==CYCLES
     records=[];out=Path('output');out.mkdir(exist_ok=True)

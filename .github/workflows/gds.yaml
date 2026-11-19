@@ -22,12 +22,17 @@ jobs:
       - name: Require zero final electrical violations and verify clock and input4 branches
         run: python flow/verify_clock_fanout.py
 
-      - name: Preserve clock-fanout acceptance record
+      - name: Require the 60 MHz final clock and clean timing at nine corners
+        run: python flow/verify_clock_frequency.py
+
+      - name: Preserve timing and fanout acceptance records
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: version24-fanout-acceptance
-          path: runs/wokwi/fanout_acceptance.json
+          name: version25-physical-acceptance
+          path: |
+            runs/wokwi/fanout_acceptance.json
+            runs/wokwi/clock_frequency_acceptance.json
           if-no-files-found: warn
 
   precheck:
@@ -49,11 +54,11 @@ jobs:
       - name: GL test
         uses: TinyTapeout/tt-gds-action/gl_test@ttsky26d
 
-      - name: Archive version24 GL case records
+      - name: Archive version25 GL case records
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: version24-gl-case-records
+          name: version25-gl-case-records
           path: test/output/*.json
           if-no-files-found: warn
 

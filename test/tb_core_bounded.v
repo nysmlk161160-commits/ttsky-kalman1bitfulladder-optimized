@@ -1,6 +1,6 @@
 `timescale 1ns/1ps
 module tb_core_bounded;
- reg clk=0;always #5 clk=~clk;
+ reg clk=0;always #8.333 clk=~clk;
  reg rst_n=0,ds=0,ms=0;
  reg [13:0] p=0;reg [14:0] s=0;
  reg [10:0] a=0;reg signed [14:0] b=0;

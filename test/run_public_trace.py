@@ -2,10 +2,11 @@
 from pathlib import Path
 import argparse,json,hashlib,shutil,subprocess,collections
 from public_trace_vectors import vectors,CYCLES,SEED
+from format_config import VERSION
 
 TB=r'''`timescale 1ns/1ps
 module tb_public_trace;
- reg clk=0; always #10 clk=~clk;
+ reg clk=0; always #8.333 clk=~clk;
  reg rst_n=0,ena=1;reg [7:0] ui_in=0,uio_in=0;
  wire [7:0] guo,guio,goe,duo,duio,doe;
  golden_tt_um_example golden(ui_in,guo,uio_in,guio,goe,ena,clk,rst_n);
@@ -58,7 +59,7 @@ def main():
         expected=int(exp,16);actual=int(actual,16);states[state]+=1;selectors[state].add(((rows[i][3]>>5)&1)*2+((rows[i][3]>>2)&1))
         records.append(dict(index=i,inputs=rows[i][:4],tag=rows[i][4],golden_state=state,expected=expected,actual=actual,passed=actual==expected))
     passed=r.returncode==0 and len(records)==CYCLES and all(x['passed'] for x in records)
-    data=dict(version='version24',origin='RTL golden miter',golden_commit='364c52d1b72f4f0ec7db6360e24cceffe370c8cf',
+    data=dict(version=VERSION,origin='RTL golden miter',golden_commit='364c52d1b72f4f0ec7db6360e24cceffe370c8cf',
         golden_adjustment='Encode the same default R=5 at 9 fractional bits; gain stays at 10 fractional bits.',
         cycles=len(records),passing=sum(x['passed'] for x in records),passed=passed,seed=SEED,
         state_coverage=dict(states),read_selectors_by_state={str(k):sorted(v) for k,v in selectors.items()},
