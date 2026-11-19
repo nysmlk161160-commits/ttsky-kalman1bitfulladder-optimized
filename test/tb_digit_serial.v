@@ -1,10 +1,10 @@
-`timescale 1ns / 1ps
+`timescale 1ps / 1ps
 
 // Self-checking RTL test for the unchanged Tiny Tapeout interface.
 // Vectors contain Python integer-reference outputs, not RTL-derived outputs.
 module tb_digit_serial;
     reg clk = 0;
-    always #10 clk = ~clk;
+    always #8333 clk = ~clk;
     reg rst_n = 0;
     reg ena = 1;
     reg [7:0] ui_in = 0;
@@ -41,10 +41,10 @@ module tb_digit_serial;
         output integer value;
         begin
             uio_in = select_p << 5;
-            #1;
+            #1000;
             value = uo_out;
             uio_in = (select_p << 5) | 4;
-            #1;
+            #1000;
             value = value | ((uo_out & 63) << 8);
         end
     endtask
@@ -61,7 +61,7 @@ module tb_digit_serial;
         repeat (3) @(posedge clk);
         @(negedge clk);
         rst_n = 1;
-        #1;
+        #1000;
         if (uio_oe !== 8'hc0) $fatal(1, "Unexpected I/O directions");
         case_index = 0;
         while (!$feof(fd)) begin
@@ -79,7 +79,7 @@ module tb_digit_serial;
             // Same start-pulse end / rising-edge +1 ns observation as test.py.
             while ((uio_out[7] !== 1'b1) && cycles < 340) begin
                 @(posedge clk);
-                #1;
+                #1000;
                 cycles = cycles + 1;
             end
             if (uio_out[7] !== 1'b1) $fatal(1, "Timeout at case %0d", case_index);

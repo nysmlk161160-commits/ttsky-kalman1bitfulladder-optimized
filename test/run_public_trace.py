@@ -3,9 +3,9 @@ from pathlib import Path
 import argparse,json,hashlib,shutil,subprocess,collections
 from public_trace_vectors import vectors,CYCLES,SEED
 
-TB=r'''`timescale 1ns/1ps
+TB=r'''`timescale 1ps/1ps
 module tb_public_trace;
- reg clk=0; always #10 clk=~clk;
+ reg clk=0; always #8333 clk=~clk;
  reg rst_n=0,ena=1;reg [7:0] ui_in=0,uio_in=0;
  wire [7:0] guo,guio,goe,duo,duio,doe;
  golden_tt_um_example golden(ui_in,guo,uio_in,guio,goe,ena,clk,rst_n);
@@ -16,7 +16,7 @@ module tb_public_trace;
   while(!$feof(fd))begin
    scan=$fscanf(fd,"%d %d %d %d\n",ri,ei,uii,uioi);if(scan!=4)$fatal(1,"bad stimulus");
    @(negedge clk);rst_n=ri;ena=ei;ui_in=uii;uio_in=uioi;
-   @(posedge clk);#5;
+   @(posedge clk);#5000;
    $display("TRACE %0d %06h %06h %0d",i,{guo,guio,goe},{duo,duio,doe},golden.state);
    if({guo,guio,goe}!=={duo,duio,doe})$fatal(1,"public port mismatch cycle %0d",i);
    if(rst_n)begin
