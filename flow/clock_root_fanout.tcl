@@ -90,6 +90,7 @@ close $report
 # Keep the v21 clock repair intact; give the ui_in[2] data net fanout headroom
 # before downstream antenna insertion and standard setup/hold repair.
 source [file join [file dirname [info script]] input4_fanout.tcl]
+source [file join [file dirname [info script]] input12_fanout.tcl]
 
 # The TT macro uses VDD_PIN/GND_PIN as its actual supply net names. Generic
 # OpenROADStep does not derive VDD_NET/GND_NET as the standard resizer step does.

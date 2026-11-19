@@ -23,6 +23,13 @@ def data_loads(net):
             for p,n in pins.items() if n==net and p not in ('X','Y','VPWR','VGND','VPB','VNB')]
 data_branches={name:data_loads(pins['X']) for typ,name,pins in (data_driver,data_buffer)}
 assert all(0<len(x)<=10 for x in data_branches.values()),data_branches
+byte_driver=next(c for c in cells if c[1]=='input12')
+byte_buffer=next(c for c in cells if c[1]=='input12_fanout_stage')
+assert byte_driver[2]['A']=='uio_in[2]'
+assert byte_buffer[0].startswith('sky130_fd_sc_hd__buf_')
+assert byte_buffer[2]['A']==byte_driver[2]['X']
+byte_branches={name:data_loads(pins['X']) for typ,name,pins in (byte_driver,byte_buffer)}
+assert all(0<len(x)<=10 for x in byte_branches.values()),byte_branches
 assert 'set_max_fanout 10.0000 [current_design]' in (final/'sdc/tt_um_example.sdc').read_text()
 reports=sorted(run.glob('*-openroad-stapostpnr/*/checks.rpt'))
 assert len(reports)==9, f'Expected nine final timing corners, got {len(reports)}'
@@ -32,5 +39,6 @@ for p in reports:
     assert '(VIOLATED)' not in section, f'Electrical violation retained in {p}'
     records.append(dict(corner=p.parent.name,electrical_violations=0))
 result=dict(passed=True,root_fanout=2,branch_fanouts=[len(branches[k]) for k in sorted(branches)],fanout_limit=10,input4_branch_fanouts={k:len(v) for k,v in data_branches.items()},input4_loads=data_branches,corners=records)
+result.update(input12_branch_fanouts={k:len(v) for k,v in byte_branches.items()},input12_loads=byte_branches)
 out=run/'fanout_acceptance.json';out.write_text(json.dumps(result,indent=2)+'\n')
 print(json.dumps(result,indent=2))

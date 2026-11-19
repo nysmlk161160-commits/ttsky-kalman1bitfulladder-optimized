@@ -16,3 +16,9 @@ The expected core latency is 39/29 cycles, or about 0.650/0.483 µs
 at the new target. Run the bounded 1,202-case numerical suite, 33
 protocol scenarios, 4,096-cycle golden trace and bounded arithmetic
 core tests. Confirm physical acceptance, gate simulation and precheck.
+
+The first physical run produced GDS and closed setup/hold, but a routed
+antenna diode raised the byte-select input buffer from ten to eleven
+loads. The repair buffers the six readback mux select pins on one branch
+and keeps the four write/control loads on the root. The fanout limit,
+antenna repair, 60 MHz constraint and synthesizable RTL are identical.
