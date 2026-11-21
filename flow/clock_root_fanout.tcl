@@ -113,6 +113,7 @@ foreach {port branch_name threshold} {
     puts $report "$port split fanouts: [llength [input_terms $net]] / [llength $moved]"
 }
 source [file join [file dirname [info script]] data_fanout_repair.tcl]
+source [file join [file dirname [info script]] q69_electrical_repair.tcl]
 close $report
 
 set ::env(VDD_NET) $::env(VDD_PIN)

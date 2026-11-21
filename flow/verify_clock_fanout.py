@@ -64,11 +64,28 @@ for report in reports:
     assert '(VIOLATED)' not in electrical, report
     corners.append(dict(corner=corner, **row))
 
+q69_input_fanouts = {
+    port: data_fanouts(port, branch)
+    for port, branch in (
+        ('ui_in[0]', 'q69_input0_fanout_stage'),
+        ('ui_in[3]', 'q69_input3_fanout_stage'),
+        ('ui_in[4]', 'q69_input4_fanout_stage'),
+    )
+}
+assert all(q69_input_fanouts.values()), q69_input_fanouts
+critical_drivers = {
+    name: {'master': master, 'pins': pins}
+    for name, (master, pins) in cells.items() if pins.get('Y') == '_0248_'
+}
+assert len(critical_drivers) == 1, critical_drivers
+
 result = dict(
     passed=True, root_fanout=len(root_loads), branch_fanouts=branch_fanouts,
     fanout_limit=limit, final_sdc_period_ns=period,
     input4_branch_fanouts=data_fanouts('ui_in[2]', 'input4_fanout_stage'),
     input12_branch_fanouts=data_fanouts('uio_in[2]', 'input12_fanout_stage'),
+    q69_input_branch_fanouts=q69_input_fanouts,
+    q69_internal_driver=critical_drivers,
     corners=corners,
 )
 (run / 'fanout_acceptance.json').write_text(json.dumps(result, indent=2) + '\n')
