@@ -64,10 +64,14 @@ for report in reports:
     assert '(VIOLATED)' not in electrical, report
     corners.append(dict(corner=corner, **row))
 
+input7_fanouts = data_fanouts('ui_in[5]', 'input7_fanout_stage')
+assert input7_fanouts, 'Missing v32 branch on ui_in[5]'
+
 result = dict(
     passed=True, root_fanout=len(root_loads), branch_fanouts=branch_fanouts,
     fanout_limit=limit, final_sdc_period_ns=period,
     input4_branch_fanouts=data_fanouts('ui_in[2]', 'input4_fanout_stage'),
+    input7_branch_fanouts=input7_fanouts,
     input12_branch_fanouts=data_fanouts('uio_in[2]', 'input12_fanout_stage'),
     corners=corners,
 )
