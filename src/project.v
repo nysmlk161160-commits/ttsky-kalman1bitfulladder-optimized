@@ -28,41 +28,6 @@ module ripple_adder_16bit (
     endgenerate
 endmodule
 
-// Four carry-lookahead groups replace the 16-bit ripple between groups.
-// Within each group the three carries needed for the sum can ripple locally.
-module grouped_carry_adder_16bit (
-    input wire [15:0] a, b,
-    input wire cin,
-    output wire [15:0] sum,
-    output wire cout
-);
-    wire [4:0] group_carry;
-    assign group_carry[0] = cin;
-    assign cout = group_carry[4];
-
-    genvar group_index;
-    generate
-        for (group_index = 0; group_index < 4; group_index = group_index + 1) begin : carry_group
-            localparam integer BASE = 4 * group_index;
-            wire [3:0] propagate = a[BASE +: 4] ^ b[BASE +: 4];
-            wire [3:0] generate_carry = a[BASE +: 4] & b[BASE +: 4];
-            wire [3:0] carry;
-            wire group_generate = generate_carry[3]
-                | (propagate[3] & generate_carry[2])
-                | (&propagate[3:2] & generate_carry[1])
-                | (&propagate[3:1] & generate_carry[0]);
-            assign group_carry[group_index + 1] = group_generate
-                | (&propagate & group_carry[group_index]);
-
-            assign carry[0] = group_carry[group_index];
-            assign carry[1] = generate_carry[0] | (propagate[0] & carry[0]);
-            assign carry[2] = generate_carry[1] | (propagate[1] & carry[1]);
-            assign carry[3] = generate_carry[2] | (propagate[2] & carry[2]);
-            assign sum[BASE +: 4] = propagate ^ carry;
-        end
-    endgenerate
-endmodule
-
 module kalman_div16 (
     input wire clk, rst_n, start,
     input wire [13:0] p,
@@ -212,7 +177,7 @@ module kalman_shared_work16 (
         work[25:12],
         mul_running & product[11]
     };
-    grouped_carry_adder_16bit shared_adder (
+    ripple_adder_16bit shared_adder (
         .a(shared_a),
         .b(mul_running ? mul_addend : ~{1'b0, denominator}),
         .cin(~mul_running),
