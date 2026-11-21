@@ -1,5 +1,5 @@
 # Numeric format constants; no algorithm or FSM changes.
-W=14
+W=15
 F=9
 SCALE=1<<F
 GAIN_F=10
@@ -10,5 +10,5 @@ HIGH_MASK=(1<<(W-8))-1
 HIGH_UNUSED=255^HIGH_MASK
 NORMAL=3*GAIN_F+9
 SHORTCUT=2*GAIN_F+9
-VERSION='version28'
-FORMAT='Q5.9'
+VERSION='version30'
+FORMAT='Q6.9'

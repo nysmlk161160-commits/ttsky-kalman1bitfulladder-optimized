@@ -80,7 +80,7 @@ async def test_format(d):
     out=Path('output');out.mkdir(exist_ok=True);records=[]
     for index,words in enumerate(vectors()):
         rec,_=await execute(d,words);rec['case_index']=index
-        rec['suite']='common_Q3_5_grid65' if index<65 else 'legacy65_encoded_or_clipped' if index<130 else 'bounded_random_or_bit' if index<1130+4*W else 'q5_9_directed'
+        rec['suite']='common_Q3_5_grid65' if index<65 else 'legacy65_encoded_or_clipped' if index<130 else 'bounded_random_or_bit' if index<1130+4*W else 'q6_9_directed'
         records.append(rec)
         (out/'kalman_cases.json').write_text(json.dumps(dict(version=VERSION,format=FORMAT,fraction_bits=F,gain_fraction_bits=GAIN_F,data_bits=W,
             sampling='ClockCycles(1), Timer(1ns), after start pulse end',case_count=len(records),cases=records),indent=2),encoding='utf-8')
@@ -121,7 +121,7 @@ async def test_public_storage_trace(d):
     from cocotb.triggers import RisingEdge
     d.ena.value=1;d.ui_in.value=0;d.uio_in.value=0;d.rst_n.value=0
     cocotb.start_soon(Clock(d.clk,20,unit='ns').start())
-    expected=[int(x,16) for x in Path('public_trace_expected_q5_9.hex').read_text(encoding='ascii').splitlines()]
+    expected=[int(x,16) for x in Path('public_trace_expected_q6_9.hex').read_text(encoding='ascii').splitlines()]
     stimuli=vectors();assert len(expected)==len(stimuli)==CYCLES
     records=[];out=Path('output');out.mkdir(exist_ok=True)
     try:
@@ -135,5 +135,6 @@ async def test_public_storage_trace(d):
     finally:
         (out/'public_trace_cases.json').write_text(json.dumps(dict(version=VERSION,cycles=len(records),seed=SEED,
             golden_commit='364c52d1b72f4f0ec7db6360e24cceffe370c8cf',
+            golden_adjustment='W15/F9 separate-register golden; gain F10; default R5',
             sampling='5ns after rising edge; stimulus at prior falling edge; compare all three public output buses',
             cases=records),indent=2),encoding='utf-8')

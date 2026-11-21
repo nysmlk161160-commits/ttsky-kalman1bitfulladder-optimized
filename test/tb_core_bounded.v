@@ -2,11 +2,11 @@
 module tb_core_bounded;
  reg clk=0;always #5 clk=~clk;
  reg rst_n=0,ds=0,ms=0;
- reg [13:0] p=0;reg [14:0] s=0;
- reg [10:0] a=0;reg signed [14:0] b=0;
- wire [10:0] gain;wire signed [14:0] product;wire dd,md;
- kalman_div16 div_dut(clk,rst_n,ds,p,s,gain,dd);
- kalman_mul16 mul_dut(clk,rst_n,ms,a,b,product,md);
+ reg [14:0] p=0;reg [15:0] s=0;
+ reg [10:0] a=0;reg signed [15:0] b=0;
+ wire [10:0] gain;wire signed [15:0] product;wire dd,md;
+ kalman_div17 div_dut(clk,rst_n,ds,p,s,gain,dd);
+ kalman_mul17 mul_dut(clk,rst_n,ms,a,b,product,md);
  integer fd,scan,pi,ri,ai,bi,expected,cycles,dc=0,mc=0;
  initial begin
   repeat(2) @(negedge clk);rst_n=1;

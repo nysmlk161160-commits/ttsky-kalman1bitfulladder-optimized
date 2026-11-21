@@ -3,7 +3,7 @@ from pathlib import Path
 import argparse,json,random,shutil,subprocess
 from format_config import W,F,SCALE,GAIN_F,MASK,SIGN,NORMAL,SHORTCUT,VERSION,FORMAT
 
-Q59_DIRECTED = (
+FORMAT_DIRECTED = (
     (12*SCALE, 0, SCALE, 5*SCALE),
     (-12*SCALE, 0, SCALE, 5*SCALE),
     (12*SCALE, -12*SCALE, SCALE, SCALE),
@@ -20,6 +20,22 @@ Q59_DIRECTED = (
     (-3*SCALE//2, 0, 26, 26),
     (12*SCALE, -12*SCALE, 0, 0),
     (12*SCALE, -12*SCALE, 1, MASK),
+    (24*SCALE, 0, SCALE, 5*SCALE),
+    (-24*SCALE, 0, SCALE, 5*SCALE),
+    (31*SCALE, -31*SCALE, SCALE, SCALE),
+    (-31*SCALE, 31*SCALE, SCALE, SCALE),
+    (16*SCALE, 0, MASK, MASK),
+    (-16*SCALE-1, 0, MASK, MASK),
+    (SIGN-1, -SIGN, 1, MASK),
+    (-SIGN, SIGN-1, MASK, 1),
+    (SIGN-1, -SIGN, MASK, MASK-1),
+    (-SIGN, SIGN-1, MASK-1, MASK),
+    (SIGN-1, -SIGN, MASK, 0),
+    (-SIGN, SIGN-1, MASK, 0),
+    (31*SCALE, -31*SCALE, 0, 0),
+    (31*SCALE, -31*SCALE, 32767, 32767),
+    (SIGN-1, -SIGN, 16384, 16384),
+    (-SIGN, SIGN-1, 16384, 16384),
 )
 
 def legacy65():
@@ -47,7 +63,7 @@ def vectors():
         for bit in range(W):
             row=[0,0,0,0];row[address]=-SIGN if address<2 and bit==W-1 else 1<<bit
             rows.append(tuple(row))
-    return rows + list(Q59_DIRECTED)
+    return rows + list(FORMAT_DIRECTED)
 
 def simple_reference(words):
     z,x,p,r=words;k=(p<<GAIN_F)//(p+r) if p+r else 0
@@ -65,7 +81,7 @@ def main():
     passed=r.returncode==0 and 'PASS:' in r.stdout
     (out/'result.json').write_text(json.dumps(dict(version=VERSION,format=FORMAT,cases=len(cases),common_Q3_5_grid_cases=65,
         legacy65_encoded_or_clipped_cases=65 if F>=6 else 0,additional_random_cases=1000,bit_cases=4*W,
-        q5_9_directed_cases=len(Q59_DIRECTED),gain_fraction_bits=GAIN_F,normal_cycles=NORMAL,
+        q6_9_directed_cases=len(FORMAT_DIRECTED),gain_fraction_bits=GAIN_F,normal_cycles=NORMAL,
         shortcut_cycles=SHORTCUT,passed=passed,kind='bounded interface replay, not exhaustive'),indent=2),encoding='utf-8')
     print(r.stdout+r.stderr,end='')
     if not passed:raise SystemExit(r.returncode or 1)

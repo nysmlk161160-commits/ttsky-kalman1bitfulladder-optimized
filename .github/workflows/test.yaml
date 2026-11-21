@@ -32,7 +32,7 @@ jobs:
           # make will return success even if the tests fail, so check results.xml for failed tests
           python -m cocotb_tools.check_results results.xml
 
-      - name: Run version28 Q5.9 interface regression
+      - name: Run version30 Q6.9 interface regression
         run: python test/run_digit_serial.py
 
       - name: Bounded arithmetic boundary and fixed-random checks
@@ -41,7 +41,7 @@ jobs:
       - name: Public-port simultaneous-write-start histories
         run: python test/run_simultaneous.py
 
-      - name: Public-port cycle trace against Q5.9 separate-register golden RTL
+      - name: Public-port cycle trace against Q6.9 separate-register golden RTL
         run: python test/run_public_trace.py --verify-fixture
 
       - name: Test Summary
@@ -59,7 +59,7 @@ jobs:
             test/tb.fst
             test/results.xml
             test/output/*
-            test/sim_build/digit_serial/q5_9/*
+            test/sim_build/digit_serial/q6_9/*
             test/sim_build/core_bounded/*
             test/sim_build/simultaneous/*
             test/sim_build/public_trace/*
