@@ -32,7 +32,7 @@ jobs:
           # make will return success even if the tests fail, so check results.xml for failed tests
           python -m cocotb_tools.check_results results.xml
 
-      - name: Run version28 Q5.9 interface regression
+      - name: Run version32 Q5.9 interface regression
         run: python test/run_digit_serial.py
 
       - name: Bounded arithmetic boundary and fixed-random checks

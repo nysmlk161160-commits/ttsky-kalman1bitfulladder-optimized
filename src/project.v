@@ -28,33 +28,31 @@ module ripple_adder_16bit (
     endgenerate
 endmodule
 
+// Restoring division. The datapath supplies the registered remainder and
+// denominator, and returns the shared subtractor result and carry.
 module kalman_div16 (
     input wire clk, rst_n, start,
     input wire [13:0] p,
-    input wire [14:0] s,
+    input wire [14:0] denominator, remainder, difference,
+    input wire no_borrow,
+    output wire trial_msb,
+    output wire [15:0] addend,
+    output wire [14:0] next_remainder,
     output wire [10:0] result,
-    output reg done
+    output reg running, done
 );
-    reg [14:0] remainder;
     reg [9:0] quotient;
     reg equal_case;
     reg [3:0] gain_index;
-    reg running;
-    assign result = {equal_case, quotient};
 
-    // The trial shift is wiring: consume one fractional quotient bit per clock.
     wire [15:0] trial_bits = {remainder, 1'b0};
-    wire [15:0] difference;
-    wire no_borrow;
-    wire [9:0] next_quotient = {quotient[8:0], no_borrow};
-    ripple_adder_16bit divider_adder (
-        .a(trial_bits), .b(~{1'b0, s}), .cin(1'b1),
-        .sum(difference), .cout(no_borrow)
-    );
+    assign trial_msb = trial_bits[15];
+    assign addend = ~{1'b0, denominator};
+    assign next_remainder = no_borrow ? difference : trial_bits[14:0];
+    assign result = {equal_case, quotient};
 
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            remainder <= 0;
             quotient <= 0;
             equal_case <= 0;
             gain_index <= 0;
@@ -63,16 +61,14 @@ module kalman_div16 (
         end else begin
             done <= 0;
             if (start) begin
-                remainder <= {1'b0, p};
                 quotient <= 0;
-                equal_case <= (s != 0 && p == s);
+                equal_case <= (denominator != 0 && p == denominator);
                 gain_index <= 0;
-                running <= (s != 0 && p != s);
-                if (s == 0 || p == s)
+                running <= (denominator != 0 && p != denominator);
+                if (denominator == 0 || p == denominator)
                     done <= 1;
             end else if (running) begin
-                remainder <= no_borrow ? difference[14:0] : trial_bits[14:0];
-                quotient <= next_quotient;
+                quotient <= {quotient[8:0], no_borrow};
                 if (gain_index == 9) begin
                     running <= 0;
                     done <= 1;
@@ -84,43 +80,36 @@ module kalman_div16 (
     end
 endmodule
 
+// Serial signed multiplication. Fuse the conditional add and arithmetic
+// shift using the shared adder sum and the registered product.
 module kalman_mul16 (
     input wire clk, rst_n, start,
-    input wire [10:0] a,
     input wire signed [14:0] b,
+    input wire [26:0] product,
+    input wire [15:0] sum,
+    output wire [15:0] addend,
+    output wire [25:0] next_product,
     output wire signed [14:0] result,
-    output reg done
+    output reg running, done
 );
-    reg [26:0] product;
     reg [3:0] bit_count;
-    reg running;
-    assign result = $signed(product[24:10]);
 
-    // Fuse the conditional add and arithmetic shift at the register input.
-    // Shift the newly computed sum, not the previous cycle's accumulator.
-    wire [15:0] sum;
-    wire unused_carry;
     wire [15:0] multiplicand = {b[14], b};
-    wire [26:0] next_product = {sum[15], sum, product[10:1]};
-    ripple_adder_16bit multiplier_adder (
-        .a(product[26:11]), .b(multiplicand & {16{product[0]}}),
-        .cin(1'b0), .sum(sum), .cout(unused_carry)
-    );
+    assign addend = multiplicand & {16{product[0]}};
+    assign next_product = {sum, product[10:1]};
+    assign result = $signed(product[24:10]);
 
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            product <= 0;
             bit_count <= 0;
             running <= 0;
             done <= 0;
         end else begin
             done <= 0;
             if (start) begin
-                product <= {16'b0, a};
                 bit_count <= 0;
                 running <= 1;
             end else if (running) begin
-                product <= next_product;
                 if (bit_count == 10) begin
                     running <= 0;
                     done <= 1;
@@ -132,61 +121,48 @@ module kalman_mul16 (
     end
 endmodule
 
-// DIV and MUL share the work bank and one 16-bit adder.
-module kalman_shared_work16 (
+// One work bank and one adder service the mutually exclusive DIV/MUL
+// requests. The controllers own algorithm state; the bank owns data.
+module kalman_shared_datapath (
     input wire clk, rst_n,
     input wire capture_s,
     input wire [14:0] s_next,
-    input wire div_start, mul_start,
+    input wire div_start, div_running,
     input wire [13:0] p,
-    input wire signed [14:0] b,
-    output wire [10:0] div_result,
-    output reg div_done,
-    output wire signed [14:0] mul_result,
-    output reg mul_done
+    input wire div_trial_msb,
+    input wire [15:0] div_addend,
+    input wire [14:0] next_remainder,
+    input wire mul_start, mul_running,
+    input wire [10:0] gain,
+    input wire [15:0] mul_addend,
+    input wire [25:0] next_product,
+    output wire [14:0] denominator, remainder,
+    output wire [26:0] product,
+    output wire [15:0] sum,
+    output wire no_borrow
 );
     reg [29:0] work;
-    // Align the remainder with the multiplier's high slice. The middle
-    // fourteen A inputs then read the same flops in both arithmetic phases.
-    wire [14:0] denominator = {work[29:27], work[11:0]};
-    wire [14:0] remainder = work[26:12];
-    // Original product[26] == product[25] after reset, load and every step.
-    // Represent that already-synthesized redundancy as wiring, not a new FF.
-    wire [26:0] product = {work[25], work[25:0]};
-    reg [9:0] quotient;
-    reg equal_case;
-    reg [3:0] gain_index;
-    reg div_running;
-    reg [3:0] bit_count;
-    reg mul_running;
-    assign div_result = {equal_case, quotient};
-    assign mul_result = $signed(product[24:10]);
+    assign denominator = {work[29:27], work[11:0]};
+    assign remainder = work[26:12];
+    // Sign extension supplies product[26] without another flop.
+    assign product = {work[25], work[25:0]};
 
-    wire [15:0] trial_bits = {remainder, 1'b0};
-    wire [15:0] shared_sum;
-    wire [15:0] difference = shared_sum;
-    wire no_borrow;
-    wire [9:0] next_quotient = {quotient[8:0], no_borrow};
-    wire [15:0] multiplicand = {b[14], b};
-    wire [15:0] mul_addend = multiplicand & {16{product[0]}};
-    wire [26:0] next_product = {shared_sum[15], shared_sum, product[10:1]};
-    // The top-level schedule makes the two running flags mutually exclusive.
-    // The carry output is consumed only by the divider.
+    // A[14:1] is identical in both modes by construction. Only A[15],
+    // A[0], B and carry-in need mode selection.
     wire [15:0] shared_a = {
-        mul_running ? product[26] : trial_bits[15],
+        mul_running ? product[26] : div_trial_msb,
         work[25:12],
         mul_running & product[11]
     };
     ripple_adder_16bit shared_adder (
         .a(shared_a),
-        .b(mul_running ? mul_addend : ~{1'b0, denominator}),
+        .b(mul_running ? mul_addend : div_addend),
         .cin(~mul_running),
-        .sum(shared_sum), .cout(no_borrow)
+        .sum(sum), .cout(no_borrow)
     );
 
-    // The original top-level schedule makes DIV and MUL ownership exclusive.
-    // capture_s samples OLD P/R on the accepted-start edge; DIV loads live P
-    // one edge later, preserving simultaneous-write/start behavior exactly.
+    // On accepted start, capture old P+R. The later div_start reads live P.
+    // Keep the original ordering of writes to the overlapping bank slices.
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             work <= 0;
@@ -196,60 +172,11 @@ module kalman_shared_work16 (
             if (div_start)
                 work[26:12] <= {1'b0, p};
             else if (div_running)
-                work[26:12] <= no_borrow ? difference[14:0] : trial_bits[14:0];
+                work[26:12] <= next_remainder;
             if (mul_start)
-                work[25:0] <= {15'b0, div_result};
+                work[25:0] <= {15'b0, gain};
             else if (mul_running)
-                work[25:0] <= next_product[25:0];
-        end
-    end
-
-    // Retain both counters and both running/done pairs for attribution.
-    always @(posedge clk or negedge rst_n) begin
-        if (!rst_n) begin
-            quotient <= 0;
-            equal_case <= 0;
-            gain_index <= 0;
-            div_running <= 0;
-            div_done <= 0;
-        end else begin
-            div_done <= 0;
-            if (div_start) begin
-                quotient <= 0;
-                equal_case <= (denominator != 0 && p == denominator);
-                gain_index <= 0;
-                div_running <= (denominator != 0 && p != denominator);
-                if (denominator == 0 || p == denominator)
-                    div_done <= 1;
-            end else if (div_running) begin
-                quotient <= next_quotient;
-                if (gain_index == 9) begin
-                    div_running <= 0;
-                    div_done <= 1;
-                end else begin
-                    gain_index <= gain_index + 1'b1;
-                end
-            end
-        end
-    end
-    always @(posedge clk or negedge rst_n) begin
-        if (!rst_n) begin
-            bit_count <= 0;
-            mul_running <= 0;
-            mul_done <= 0;
-        end else begin
-            mul_done <= 0;
-            if (mul_start) begin
-                bit_count <= 0;
-                mul_running <= 1;
-            end else if (mul_running) begin
-                if (bit_count == 10) begin
-                    mul_running <= 0;
-                    mul_done <= 1;
-                end else begin
-                    bit_count <= bit_count + 1'b1;
-                end
-            end
+                work[25:0] <= next_product;
         end
     end
 endmodule
@@ -292,11 +219,35 @@ module tt_um_example (
     assign uio_oe = 8'b11000000;
     wire capture_s = (state == IDLE && uio_in[4]);
     wire [14:0] s_next = {1'b0, p} + {1'b0, r};
-    kalman_shared_work16 shared_work (
+    wire div_running, mul_running, div_trial_msb, no_borrow;
+    wire [14:0] denominator, remainder, next_remainder;
+    wire [26:0] product;
+    wire [25:0] next_product;
+    wire [15:0] div_addend, mul_addend, shared_sum;
+
+    kalman_div16 divider (
+        .clk(clk), .rst_n(rst_n), .start(div_start), .p(p),
+        .denominator(denominator), .remainder(remainder),
+        .difference(shared_sum[14:0]), .no_borrow(no_borrow),
+        .trial_msb(div_trial_msb), .addend(div_addend),
+        .next_remainder(next_remainder), .result(div_result),
+        .running(div_running), .done(div_done)
+    );
+    kalman_mul16 multiplier (
+        .clk(clk), .rst_n(rst_n), .start(mul_start), .b(mul_b),
+        .product(product), .sum(shared_sum), .addend(mul_addend),
+        .next_product(next_product), .result(mul_result),
+        .running(mul_running), .done(mul_done)
+    );
+    kalman_shared_datapath shared_work (
         .clk(clk), .rst_n(rst_n), .capture_s(capture_s), .s_next(s_next),
-        .div_start(div_start), .mul_start(mul_start), .p(p), .b(mul_b),
-        .div_result(div_result), .div_done(div_done),
-        .mul_result(mul_result), .mul_done(mul_done)
+        .div_start(div_start), .div_running(div_running), .p(p),
+        .div_trial_msb(div_trial_msb), .div_addend(div_addend),
+        .next_remainder(next_remainder), .mul_start(mul_start),
+        .mul_running(mul_running), .gain(div_result), .mul_addend(mul_addend),
+        .next_product(next_product), .denominator(denominator),
+        .remainder(remainder), .product(product), .sum(shared_sum),
+        .no_borrow(no_borrow)
     );
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
