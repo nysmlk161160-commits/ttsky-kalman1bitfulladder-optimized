@@ -132,7 +132,7 @@ module kalman_mul16 (
     end
 endmodule
 
-// Q4.10: DIV owns S15/remainder15; MUL owns 26 effective bits.
+// DIV and MUL share the work bank and one 16-bit adder.
 module kalman_shared_work16 (
     input wire clk, rst_n,
     input wire capture_s,
@@ -161,20 +161,20 @@ module kalman_shared_work16 (
     assign mul_result = $signed(product[24:10]);
 
     wire [15:0] trial_bits = {remainder, 1'b0};
-    wire [15:0] difference;
+    wire [15:0] shared_sum;
+    wire [15:0] difference = shared_sum;
     wire no_borrow;
     wire [9:0] next_quotient = {quotient[8:0], no_borrow};
-    ripple_adder_16bit divider_adder (
-        .a(trial_bits), .b(~{1'b0, denominator}), .cin(1'b1),
-        .sum(difference), .cout(no_borrow)
-    );
-    wire [15:0] sum;
-    wire unused_carry;
     wire [15:0] multiplicand = {b[14], b};
-    wire [26:0] next_product = {sum[15], sum, product[10:1]};
-    ripple_adder_16bit multiplier_adder (
-        .a(product[26:11]), .b(multiplicand & {16{product[0]}}),
-        .cin(1'b0), .sum(sum), .cout(unused_carry)
+    wire [15:0] mul_addend = multiplicand & {16{product[0]}};
+    wire [26:0] next_product = {shared_sum[15], shared_sum, product[10:1]};
+    // The top-level schedule makes the two running flags mutually exclusive.
+    // The carry output is consumed only by the divider.
+    ripple_adder_16bit shared_adder (
+        .a(mul_running ? product[26:11] : trial_bits),
+        .b(mul_running ? mul_addend : ~{1'b0, denominator}),
+        .cin(~mul_running),
+        .sum(shared_sum), .cout(no_borrow)
     );
 
     // The original top-level schedule makes DIV and MUL ownership exclusive.

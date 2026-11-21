@@ -1,36 +1,75 @@
-"""Fail the completed build if clock topology or any final-corner fanout is wrong."""
+"""Verify the implemented clock and all post-route timing/electrical corners."""
 from pathlib import Path
-import json,re,sys
+import json
+import re
 
-run=Path('runs/wokwi')
-final=run/'final'
-text=(final/'nl/tt_um_example.nl.v').read_text()
-cells=[]
-for m in re.finditer(r'^\s*(sky130_\w+)\s+(\\\S+|[\w.]+)\s*\((.*?)\);',text,re.M|re.S):
-    cells.append((m[1],m[2],dict((p,n.strip()) for p,n in re.findall(r'\.(\w+)\s*\(([^)]+)\)',m[3]))))
-root=next(c for c in cells if c[1]=='clkbuf_0_clk')
-def inputs(net):return [name for typ,name,pins in cells if pins.get('A')==net]
-assert sorted(inputs(root[2]['X']))==['clk_fanout_stage_0','clk_fanout_stage_1']
-branches={name:inputs(pins['X']) for typ,name,pins in cells if name in ('clk_fanout_stage_0','clk_fanout_stage_1')}
-assert len(branches)==2 and all(len(x)==8 for x in branches.values())
-data_driver=next(c for c in cells if c[1]=='input4')
-data_buffer=next(c for c in cells if c[1]=='input4_fanout_stage')
-assert data_driver[2]['A']=='ui_in[2]'
-assert data_buffer[0].startswith('sky130_fd_sc_hd__buf_')
-assert data_buffer[2]['A']==data_driver[2]['X']
-def data_loads(net):
-    return [dict(cell=name,pin=p,master=typ) for typ,name,pins in cells
-            for p,n in pins.items() if n==net and p not in ('X','Y','VPWR','VGND','VPB','VNB')]
-data_branches={name:data_loads(pins['X']) for typ,name,pins in (data_driver,data_buffer)}
-assert all(0<len(x)<=10 for x in data_branches.values()),data_branches
-assert 'set_max_fanout 10.0000 [current_design]' in (final/'sdc/tt_um_example.sdc').read_text()
-reports=sorted(run.glob('*-openroad-stapostpnr/*/checks.rpt'))
-assert len(reports)==9, f'Expected nine final timing corners, got {len(reports)}'
-records=[]
-for p in reports:
-    section=p.read_text().split('report_check_types -max_slew -max_cap -max_fanout -violators',1)[1].split('report_parasitic_annotation',1)[0]
-    assert '(VIOLATED)' not in section, f'Electrical violation retained in {p}'
-    records.append(dict(corner=p.parent.name,electrical_violations=0))
-result=dict(passed=True,root_fanout=2,branch_fanouts=[len(branches[k]) for k in sorted(branches)],fanout_limit=10,input4_branch_fanouts={k:len(v) for k,v in data_branches.items()},input4_loads=data_branches,corners=records)
-out=run/'fanout_acceptance.json';out.write_text(json.dumps(result,indent=2)+'\n')
-print(json.dumps(result,indent=2))
+run = Path('runs/wokwi')
+final = run / 'final'
+text = (final / 'nl/tt_um_example.nl.v').read_text()
+cells = {}
+for match in re.finditer(r'^\s*(sky130_\w+)\s+(\\\S+|[\w.]+)\s*\((.*?)\);', text, re.M | re.S):
+    pins = {p: n.strip() for p, n in re.findall(r'\.(\w+)\s*\(([^)]+)\)', match[3])}
+    cells[match[2]] = (match[1], pins)
+
+
+def input_loads(net):
+    return [
+        (name, pin) for name, (_, pins) in cells.items() for pin, wire in pins.items()
+        if wire == net and pin not in ('X', 'Y', 'Q', 'Q_N', 'VPWR', 'VGND', 'VPB', 'VNB')
+    ]
+
+
+limit = 10
+root = cells['clkbuf_0_clk'][1]
+assert root['A'] == 'clk'
+root_loads = input_loads(root['X'])
+assert 0 < len(root_loads) <= limit, root_loads
+branches = [name for name in sorted(cells) if name.startswith('clk_fanout_stage_')]
+for name in branches:
+    assert (name, 'A') in root_loads, name
+branch_fanouts = [len(input_loads(cells[name][1]['X'])) for name in branches]
+assert all(0 < n <= limit for n in branch_fanouts), branch_fanouts
+
+
+def data_fanouts(port, branch):
+    if branch not in cells:
+        return {}
+    master, pins = cells[branch]
+    assert master.startswith('sky130_fd_sc_hd__buf_'), branch
+    driver = next(name for name, (_, p) in cells.items()
+                  if p.get('X') == pins['A'] and p.get('A') == port)
+    fanouts = {name: len(input_loads(cells[name][1]['X'])) for name in (driver, branch)}
+    assert all(0 < n <= limit for n in fanouts.values()), fanouts
+    return fanouts
+
+
+sdc = (final / 'sdc/tt_um_example.sdc').read_text()
+period = float(re.search(r'create_clock[^\n]*-period\s+([\d.]+)', sdc)[1])
+assert abs(period - 20) < 0.0001, period
+assert 'set_max_fanout 10.0000 [current_design]' in sdc
+metrics = json.loads((final / 'metrics.json').read_text())
+reports = sorted(run.glob('*-openroad-stapostpnr/*/checks.rpt'))
+assert len(reports) == 9, len(reports)
+checks = ('timing__setup_vio__count', 'timing__hold_vio__count',
+          'design__max_slew_violation__count', 'design__max_cap_violation__count',
+          'design__max_fanout_violation__count')
+corners = []
+for report in reports:
+    corner = report.parent.name
+    row = {key: metrics[key + '__corner:' + corner] for key in checks}
+    assert all(value == 0 for value in row.values()), (corner, row)
+    electrical = report.read_text().split(
+        'report_check_types -max_slew -max_cap -max_fanout -violators', 1
+    )[1].split('report_parasitic_annotation', 1)[0]
+    assert '(VIOLATED)' not in electrical, report
+    corners.append(dict(corner=corner, **row))
+
+result = dict(
+    passed=True, root_fanout=len(root_loads), branch_fanouts=branch_fanouts,
+    fanout_limit=limit, final_sdc_period_ns=period,
+    input4_branch_fanouts=data_fanouts('ui_in[2]', 'input4_fanout_stage'),
+    input12_branch_fanouts=data_fanouts('uio_in[2]', 'input12_fanout_stage'),
+    corners=corners,
+)
+(run / 'fanout_acceptance.json').write_text(json.dumps(result, indent=2) + '\n')
+print(json.dumps(result, indent=2))

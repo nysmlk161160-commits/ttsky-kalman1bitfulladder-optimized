@@ -9,7 +9,7 @@ from librelane.steps.common_variables import dpl_variables
 class ClockRootFanout(OpenROADStep):
     id = "Kalman.ClockRootFanout"
     name = "Clock Root Fanout"
-    long_name = "Split the 16-load clock root into two balanced 8-load branches"
+    long_name = "Split overloaded clock and selected public input nets"
     config_vars = OpenROADStep.config_vars + dpl_variables
 
     def get_script_path(self):
