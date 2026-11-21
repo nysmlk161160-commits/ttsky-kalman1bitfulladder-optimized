@@ -1,29 +1,48 @@
 `default_nettype none
 
-module full_adder_1bit (
-    input wire a, b, cin,
-    output wire sum, cout
-);
-    assign sum = a ^ b ^ cin;
-    assign cout = (a & b) | ((a ^ b) & cin);
-endmodule
-
-module ripple_adder_16bit (
-    input wire [15:0] a, b,
+module grouped_carry_adder #(
+    parameter integer GROUPS = 4
+) (
+    input wire [4*GROUPS-1:0] a, b,
     input wire cin,
-    output wire [15:0] sum,
+    output wire [4*GROUPS-1:0] sum,
     output wire cout
 );
-    wire [16:0] c;
-    assign c[0] = cin;
-    assign cout = c[16];
-    genvar i;
+    wire [GROUPS-1:0] group_propagate, group_generate;
+    wire [GROUPS:0] group_carry;
+    assign group_carry[0] = cin;
+    assign cout = group_carry[GROUPS];
+
+    genvar group_index, prior_group;
     generate
-        for (i = 0; i < 16; i = i + 1) begin : bit_slice
-            full_adder_1bit fa (
-                .a(a[i]), .b(b[i]), .cin(c[i]),
-                .sum(sum[i]), .cout(c[i + 1])
-            );
+        for (group_index = 0; group_index < GROUPS; group_index = group_index + 1) begin : carry_group
+            localparam integer BASE = 4 * group_index;
+            wire [3:0] p = a[BASE +: 4] ^ b[BASE +: 4];
+            wire [3:0] g = a[BASE +: 4] & b[BASE +: 4];
+            wire incoming = group_carry[group_index];
+
+            assign group_propagate[group_index] = &p;
+            assign group_generate[group_index] = g[3] | (p[3] & g[2])
+                | (&p[3:2] & g[1]) | (&p[3:1] & g[0]);
+
+            // Group carries are evaluated from the original carry-in and
+            // earlier generate/propagate terms in parallel.
+            wire [group_index:0] generated_terms;
+            assign generated_terms[group_index] = group_generate[group_index];
+            for (prior_group = 0; prior_group < group_index; prior_group = prior_group + 1) begin : preceding
+                assign generated_terms[prior_group] = group_generate[prior_group]
+                    & (&group_propagate[group_index:prior_group+1]);
+            end
+            assign group_carry[group_index + 1] = (|generated_terms)
+                | ((&group_propagate[group_index:0]) & cin);
+
+            // Each bit carry within a group also resolves directly from
+            // the group input, with no dependency on the previous bit carry.
+            wire carry1 = g[0] | (p[0] & incoming);
+            wire carry2 = g[1] | (p[1] & g[0]) | (&p[1:0] & incoming);
+            wire carry3 = g[2] | (p[2] & g[1]) | (&p[2:1] & g[0])
+                | (&p[2:0] & incoming);
+            assign sum[BASE +: 4] = p ^ {carry3, carry2, carry1, incoming};
         end
     endgenerate
 endmodule
@@ -41,13 +60,17 @@ module kalman_div16 (
     reg [3:0] gain_index;
     reg running;
     assign result = {equal_case, quotient};
+    wire [3:0] next_gain_index;
+    grouped_carry_adder #(.GROUPS(1)) increment_gain (
+        .a(gain_index), .b(4'd0), .cin(1'b1), .sum(next_gain_index), .cout()
+    );
 
     // The trial shift is wiring: consume one fractional quotient bit per clock.
     wire [15:0] trial_bits = {remainder, 1'b0};
     wire [15:0] difference;
     wire no_borrow;
     wire [9:0] next_quotient = {quotient[8:0], no_borrow};
-    ripple_adder_16bit divider_adder (
+    grouped_carry_adder divider_adder (
         .a(trial_bits), .b(~{1'b0, s}), .cin(1'b1),
         .sum(difference), .cout(no_borrow)
     );
@@ -77,7 +100,7 @@ module kalman_div16 (
                     running <= 0;
                     done <= 1;
                 end else begin
-                    gain_index <= gain_index + 1'b1;
+                    gain_index <= next_gain_index;
                 end
             end
         end
@@ -95,6 +118,10 @@ module kalman_mul16 (
     reg [3:0] bit_count;
     reg running;
     assign result = $signed(product[24:10]);
+    wire [3:0] next_bit_count;
+    grouped_carry_adder #(.GROUPS(1)) increment_product (
+        .a(bit_count), .b(4'd0), .cin(1'b1), .sum(next_bit_count), .cout()
+    );
 
     // Fuse the conditional add and arithmetic shift at the register input.
     // Shift the newly computed sum, not the previous cycle's accumulator.
@@ -102,7 +129,7 @@ module kalman_mul16 (
     wire unused_carry;
     wire [15:0] multiplicand = {b[14], b};
     wire [26:0] next_product = {sum[15], sum, product[10:1]};
-    ripple_adder_16bit multiplier_adder (
+    grouped_carry_adder multiplier_adder (
         .a(product[26:11]), .b(multiplicand & {16{product[0]}}),
         .cin(1'b0), .sum(sum), .cout(unused_carry)
     );
@@ -125,7 +152,7 @@ module kalman_mul16 (
                     running <= 0;
                     done <= 1;
                 end else begin
-                    bit_count <= bit_count + 1'b1;
+                    bit_count <= next_bit_count;
                 end
             end
         end
@@ -161,6 +188,13 @@ module kalman_shared_work16 (
     reg mul_running;
     assign div_result = {equal_case, quotient};
     assign mul_result = $signed(product[24:10]);
+    wire [3:0] next_gain_index, next_bit_count;
+    grouped_carry_adder #(.GROUPS(1)) increment_gain (
+        .a(gain_index), .b(4'd0), .cin(1'b1), .sum(next_gain_index), .cout()
+    );
+    grouped_carry_adder #(.GROUPS(1)) increment_product (
+        .a(bit_count), .b(4'd0), .cin(1'b1), .sum(next_bit_count), .cout()
+    );
 
     wire [15:0] trial_bits = {remainder, 1'b0};
     wire [15:0] shared_sum;
@@ -177,7 +211,7 @@ module kalman_shared_work16 (
         work[25:12],
         mul_running & product[11]
     };
-    ripple_adder_16bit shared_adder (
+    grouped_carry_adder shared_adder (
         .a(shared_a),
         .b(mul_running ? mul_addend : ~{1'b0, denominator}),
         .cin(~mul_running),
@@ -227,7 +261,7 @@ module kalman_shared_work16 (
                     div_running <= 0;
                     div_done <= 1;
                 end else begin
-                    gain_index <= gain_index + 1'b1;
+                    gain_index <= next_gain_index;
                 end
             end
         end
@@ -247,7 +281,7 @@ module kalman_shared_work16 (
                     mul_running <= 0;
                     mul_done <= 1;
                 end else begin
-                    bit_count <= bit_count + 1'b1;
+                    bit_count <= next_bit_count;
                 end
             end
         end
@@ -284,14 +318,26 @@ module tt_um_example (
     wire do_sub = (state == P_WAIT);
     wire [13:0] alu_a = do_sub ? p : x;
     wire [13:0] alu_b = mul_result[13:0] ^ {14{do_sub}};
-    wire [13:0] alu_y = alu_a + alu_b + do_sub;
+    wire [15:0] update_sum;
+    wire [13:0] alu_y = update_sum[13:0];
+    grouped_carry_adder update_adder (
+        .a({2'b0, alu_a}), .b({2'b0, alu_b}), .cin(do_sub), .sum(update_sum), .cout()
+    );
     wire [13:0] read_result = uio_in[5] ? p_out : x_out;
 
     assign uo_out = uio_in[2] ? {2'b0, read_result[13:8]} : read_result[7:0];
     assign uio_out = {ready, (state != IDLE), 6'b0};
     assign uio_oe = 8'b11000000;
     wire capture_s = (state == IDLE && uio_in[4]);
-    wire [14:0] s_next = {1'b0, p} + {1'b0, r};
+    wire [15:0] denominator_sum, residual_difference;
+    wire [14:0] s_next = denominator_sum[14:0];
+    grouped_carry_adder denominator_adder (
+        .a({2'b0, p}), .b({2'b0, r}), .cin(1'b0), .sum(denominator_sum), .cout()
+    );
+    grouped_carry_adder residual_adder (
+        .a({{2{z[13]}}, z}), .b(~{{2{x[13]}}, x}), .cin(1'b1),
+        .sum(residual_difference), .cout()
+    );
     kalman_shared_work16 shared_work (
         .clk(clk), .rst_n(rst_n), .capture_s(capture_s), .s_next(s_next),
         .div_start(div_start), .mul_start(mul_start), .p(p), .b(mul_b),
@@ -320,7 +366,7 @@ module tt_um_example (
             end
             case (state)
                 IDLE: if (uio_in[4]) begin
-                    delta <= $signed({z[13], z}) - $signed({x[13], x});
+                    delta <= $signed(residual_difference[14:0]);
                     ready <= 0;
                     state <= DIV_START;
                 end
