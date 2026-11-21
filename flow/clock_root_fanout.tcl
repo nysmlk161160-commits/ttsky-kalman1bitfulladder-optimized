@@ -84,11 +84,15 @@ set root_count [llength [input_terms $root_net]]
 if {$root_count > $limit} { error "Clock root fanout still exceeds $limit" }
 puts $report "Clock root fanout after repair: $root_count"
 
-# Leave antenna headroom on the known input nets. In the first v32 route,
-# ui_in[5] grew from eight logical loads to twelve with antenna diodes.
-# Leave unrelated ABC-mapped data gates to the standard repair and final checks.
+# Leave antenna headroom on all eight-load data inputs. Both earlier v32
+# routes grew an unbuffered input from eight to twelve loads during repair.
+# ui_in[6:7] have four pre-route loads each and keep their original routing.
 foreach {port branch_name threshold} {
+    {ui_in[0]} input2_fanout_stage 8
+    {ui_in[1]} input3_fanout_stage 8
     {ui_in[2]} input4_fanout_stage 7
+    {ui_in[3]} input5_fanout_stage 8
+    {ui_in[4]} input6_fanout_stage 8
     {ui_in[5]} input7_fanout_stage 8
     {uio_in[2]} input12_fanout_stage 9
 } {
