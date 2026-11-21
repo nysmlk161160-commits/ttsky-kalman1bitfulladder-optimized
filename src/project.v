@@ -282,8 +282,11 @@ module tt_um_example (
 
     // One shared 14-bit datapath: X + (K*delta) or P - (K*P).
     wire do_sub = (state == P_WAIT);
+    wire writeback = mul_done && (state == X_WAIT || state == P_WAIT);
+    // Keep intermediate products from switching the top-level update ALU.
+    wire [13:0] writeback_product = mul_result[13:0] & {14{writeback}};
     wire [13:0] alu_a = do_sub ? p : x;
-    wire [13:0] alu_b = mul_result[13:0] ^ {14{do_sub}};
+    wire [13:0] alu_b = writeback_product ^ {14{do_sub}};
     wire [13:0] alu_y = alu_a + alu_b + do_sub;
     wire [13:0] read_result = uio_in[5] ? p_out : x_out;
 
