@@ -1,10 +1,15 @@
-# v30 physical attempt 2: preserve Q6.9 RTL and every implementation limit.
+# v30 physical attempt 3: preserve Q6.9 RTL and every implementation limit.
 # The first routed result added 3/5/4 antenna diode loads to these eight-load
-# input-buffer nets. Split the logical sinks before routing to leave headroom.
+# input-buffer nets. Attempt 2 repaired those nets, but rerouting added three
+# diodes to ui_in[5]. Cover every remaining eight-load data input now; ui_in[2]
+# already has a branch in the parent step and ui_in[7] has only four sinks.
 foreach {port branch_name} {
     {ui_in[0]} q69_input0_fanout_stage
+    {ui_in[1]} q69_input1_fanout_stage
     {ui_in[3]} q69_input3_fanout_stage
     {ui_in[4]} q69_input4_fanout_stage
+    {ui_in[5]} q69_input5_fanout_stage
+    {ui_in[6]} q69_input6_fanout_stage
 } {
     set term [$block findBTerm $port]
     if {$term eq "NULL"} { error "Missing Q6.9 input port $port" }

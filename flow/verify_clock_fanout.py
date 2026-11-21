@@ -68,8 +68,11 @@ q69_input_fanouts = {
     port: data_fanouts(port, branch)
     for port, branch in (
         ('ui_in[0]', 'q69_input0_fanout_stage'),
+        ('ui_in[1]', 'q69_input1_fanout_stage'),
         ('ui_in[3]', 'q69_input3_fanout_stage'),
         ('ui_in[4]', 'q69_input4_fanout_stage'),
+        ('ui_in[5]', 'q69_input5_fanout_stage'),
+        ('ui_in[6]', 'q69_input6_fanout_stage'),
     )
 }
 assert all(q69_input_fanouts.values()), q69_input_fanouts
