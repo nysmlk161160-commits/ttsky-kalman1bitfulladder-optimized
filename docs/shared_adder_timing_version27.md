@@ -21,3 +21,10 @@ checks. Compare final area to measure the cost of grouped carry.
 
 Use the same bounded numerical/protocol cases, cycle-trace comparison,
 gate-level tests and tapeout precheck as v26.
+
+Run 44877685726 closed at 50 MHz with 148 MUXes and +0.969 ns
+worst setup slack. Its new critical path had seven fanout buffers with
+9.291 ns of combined cell delay. The physical follow-up reparents three
+cascaded noninverting data branches onto their original drivers in
+parallel. The same RTL, clocks, electrical limits and acceptance checks
+apply to both implementations.
