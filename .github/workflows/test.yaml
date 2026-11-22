@@ -10,9 +10,15 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Install iverilog
+      - name: Install Icarus Verilog and Yosys
         shell: bash
-        run: sudo apt-get update && sudo apt-get install -y iverilog
+        run: sudo apt-get update && sudo apt-get install -y iverilog yosys
+
+      - name: Prove shared adder sum and carry equivalence
+        run: >-
+          yosys -p 'read_verilog src/project.v test/formal_shared_adder.v;
+          prep -top formal_shared_adder -flatten;
+          sat -verify -prove equivalent 1 -show-inputs'
 
       # Set Python up and install cocotb
       - name: Setup python
@@ -32,7 +38,7 @@ jobs:
           # make will return success even if the tests fail, so check results.xml for failed tests
           python -m cocotb_tools.check_results results.xml
 
-      - name: Run version32 Q5.9 interface regression
+      - name: Run version33 Q5.9 interface regression
         run: python test/run_digit_serial.py
 
       - name: Bounded arithmetic boundary and fixed-random checks

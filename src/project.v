@@ -1,29 +1,44 @@
 `default_nettype none
 
-module full_adder_1bit (
-    input wire a, b, cin,
-    output wire sum, cout
-);
-    assign sum = a ^ b ^ cin;
-    assign cout = (a & b) | ((a ^ b) & cin);
-endmodule
-
-module ripple_adder_16bit (
+module grouped_carry_adder_16bit (
     input wire [15:0] a, b,
     input wire cin,
     output wire [15:0] sum,
     output wire cout
 );
-    wire [16:0] c;
-    assign c[0] = cin;
-    assign cout = c[16];
-    genvar i;
+    wire [15:0] p = a ^ b;
+    wire [15:0] g = a & b;
+    wire [3:0] group_p, group_g;
+    wire [4:0] group_c;
+
+    // Group boundary carries depend directly on group generate/propagate.
+    // In particular, cout does not wait for the local sum carries.
+    assign group_c[0] = cin;
+    assign group_c[1] = group_g[0] | (group_p[0] & cin);
+    assign group_c[2] = group_g[1] | (group_p[1] & group_g[0])
+        | (&group_p[1:0] & cin);
+    assign group_c[3] = group_g[2] | (group_p[2] & group_g[1])
+        | (&group_p[2:1] & group_g[0]) | (&group_p[2:0] & cin);
+    assign group_c[4] = group_g[3] | (group_p[3] & group_g[2])
+        | (&group_p[3:2] & group_g[1]) | (&group_p[3:1] & group_g[0])
+        | (&group_p[3:0] & cin);
+    assign cout = group_c[4];
+
+    genvar group_index;
     generate
-        for (i = 0; i < 16; i = i + 1) begin : bit_slice
-            full_adder_1bit fa (
-                .a(a[i]), .b(b[i]), .cin(c[i]),
-                .sum(sum[i]), .cout(c[i + 1])
-            );
+        for (group_index = 0; group_index < 4; group_index = group_index + 1) begin : group
+            localparam integer BASE = 4 * group_index;
+            wire [3:0] gp = p[BASE +: 4];
+            wire [3:0] gg = g[BASE +: 4];
+            wire [3:0] carry;
+            assign group_p[group_index] = &gp;
+            assign group_g[group_index] = gg[3] | (gp[3] & gg[2])
+                | (&gp[3:2] & gg[1]) | (&gp[3:1] & gg[0]);
+            assign carry[0] = group_c[group_index];
+            assign carry[1] = gg[0] | (gp[0] & carry[0]);
+            assign carry[2] = gg[1] | (gp[1] & carry[1]);
+            assign carry[3] = gg[2] | (gp[2] & carry[2]);
+            assign sum[BASE +: 4] = gp ^ carry;
         end
     endgenerate
 endmodule
@@ -154,7 +169,7 @@ module kalman_shared_datapath (
         work[25:12],
         mul_running & product[11]
     };
-    ripple_adder_16bit shared_adder (
+    grouped_carry_adder_16bit shared_adder (
         .a(shared_a),
         .b(mul_running ? mul_addend : div_addend),
         .cin(~mul_running),
