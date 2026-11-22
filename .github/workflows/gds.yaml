@@ -26,7 +26,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: version33-physical-acceptance
+          name: version34-physical-acceptance
           path: runs/wokwi/fanout_acceptance.json
           if-no-files-found: warn
 
@@ -49,11 +49,11 @@ jobs:
       - name: GL test
         uses: TinyTapeout/tt-gds-action/gl_test@ttsky26d
 
-      - name: Archive version33 GL case records
+      - name: Archive version34 GL case records
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: version33-gl-case-records
+          name: version34-gl-case-records
           path: test/output/*.json
           if-no-files-found: warn
 

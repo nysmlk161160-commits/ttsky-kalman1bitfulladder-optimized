@@ -6,7 +6,7 @@ from format_config import VERSION
 
 TB=r'''`timescale 1ns/1ps
 module tb_public_trace;
- reg clk=0; always #10 clk=~clk;
+ reg clk=0; always #8.333 clk=~clk;
  reg rst_n=0,ena=1;reg [7:0] ui_in=0,uio_in=0;
  wire [7:0] guo,guio,goe,duo,duio,doe;
  golden_tt_um_example golden(ui_in,guo,uio_in,guio,goe,ena,clk,rst_n);

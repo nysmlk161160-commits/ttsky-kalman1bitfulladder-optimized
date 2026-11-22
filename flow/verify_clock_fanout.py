@@ -45,7 +45,8 @@ def data_fanouts(port, branch):
 
 sdc = (final / 'sdc/tt_um_example.sdc').read_text()
 period = float(re.search(r'create_clock[^\n]*-period\s+([\d.]+)', sdc)[1])
-assert abs(period - 20) < 0.0001, period
+expected_period = json.loads(Path('src/config.json').read_text())['CLOCK_PERIOD']
+assert abs(period - expected_period) < 0.0001, (period, expected_period)
 assert 'set_max_fanout 10.0000 [current_design]' in sdc
 metrics = json.loads((final / 'metrics.json').read_text())
 reports = sorted(run.glob('*-openroad-stapostpnr/*/checks.rpt'))

@@ -4,7 +4,7 @@
 // Vectors contain Python integer-reference outputs, not RTL-derived outputs.
 module tb_digit_serial;
     reg clk = 0;
-    always #10 clk = ~clk;
+    always #8.333 clk = ~clk;
     reg rst_n = 0;
     reg ena = 1;
     reg [7:0] ui_in = 0;
