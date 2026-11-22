@@ -4,7 +4,7 @@ project:
   discord: ""
   description: "14-bit Q5.9 Kalman correction with 10 fractional gain bits"
   language: "Verilog"
-  clock_hz: 60000000
+  clock_hz: 52500000
   tiles: "1x1"
   top_module: "tt_um_example"
   source_files:
