@@ -222,18 +222,56 @@ module tt_um_example (
     wire signed [14:0] mul_b = (state == X_START || state == X_WAIT)
                                       ? delta : $signed({1'b0, p});
 
-    // One shared 14-bit datapath: X + (K*delta) or P - (K*P).
-    wire do_sub = (state == P_WAIT);
-    wire [13:0] alu_a = do_sub ? p : x;
-    wire [13:0] alu_b = mul_result[13:0] ^ {14{do_sub}};
-    wire [13:0] alu_y = alu_a + alu_b + do_sub;
+    // The start edge captures S. DIV_START computes delta in parallel
+    // with divider initialisation, and the wait states use the same ALU
+    // to write back the multiplier results.
+    reg [14:0] alu_a, alu_b;
+    reg alu_subtract;
+    always @* begin
+        alu_subtract = 1'b0;
+        case (state)
+            DIV_START: begin
+                alu_a = {z[13], z};
+                alu_b = {x[13], x};
+                alu_subtract = 1'b1;
+            end
+            X_WAIT: begin
+                alu_a = {x[13], x};
+                alu_b = mul_result;
+            end
+            P_WAIT: begin
+                alu_a = {1'b0, p};
+                alu_b = mul_result;
+                alu_subtract = 1'b1;
+            end
+            default: begin
+                alu_a = {1'b0, p};
+                alu_b = {1'b0, r};
+            end
+        endcase
+    end
+
+    wire [14:0] alu_addend = alu_b ^ {15{alu_subtract}};
+    // The fixed extra LSB generates carry-in for subtraction and is
+    // discarded. The upper 15 positions implement the only top-level sum.
+    wire [15:0] alu_padded_sum = {alu_a, 1'b1} + {alu_addend, alu_subtract};
+    wire [14:0] alu_y = alu_padded_sum[15:1];
     wire [13:0] read_result = uio_in[5] ? p_out : x_out;
 
     assign uo_out = uio_in[2] ? {2'b0, read_result[13:8]} : read_result[7:0];
     assign uio_out = {ready, (state != IDLE), 6'b0};
     assign uio_oe = 8'b11000000;
     wire capture_s = (state == IDLE && uio_in[4]);
-    wire [14:0] s_next = {1'b0, p} + {1'b0, r};
+
+    // A simultaneous X/Z write must not change the operands used for
+    // delta. Stage that byte in delta until DIV_START, when the old X/Z
+    // are still available before the staged write takes effect.
+    wire idle_write = (state == IDLE && uio_in[3]);
+    wire defer_xz_write = idle_write && uio_in[4] && !uio_in[1];
+    wire replay_xz_write = (state == DIV_START && delta[10]);
+    wire [1:0] write_address = replay_xz_write ? {1'b0, delta[9]} : uio_in[1:0];
+    wire write_upper = replay_xz_write ? delta[8] : uio_in[2];
+    wire [7:0] write_byte = replay_xz_write ? delta[7:0] : ui_in;
     wire div_running, mul_running, div_trial_msb, no_borrow;
     wire [14:0] denominator, remainder, next_remainder;
     wire [26:0] product;
@@ -255,7 +293,7 @@ module tt_um_example (
         .running(mul_running), .done(mul_done)
     );
     kalman_shared_datapath shared_work (
-        .clk(clk), .rst_n(rst_n), .capture_s(capture_s), .s_next(s_next),
+        .clk(clk), .rst_n(rst_n), .capture_s(capture_s), .s_next(alu_y),
         .div_start(div_start), .div_running(div_running), .p(p),
         .div_trial_msb(div_trial_msb), .div_addend(div_addend),
         .next_remainder(next_remainder), .mul_start(mul_start),
@@ -276,32 +314,35 @@ module tt_um_example (
             ready <= 0;
             state <= IDLE;
         end else begin
-            if (state == IDLE && uio_in[3]) begin
-                case (uio_in[1:0])
-                    0: if (uio_in[2]) z[13:8] <= ui_in[5:0]; else z[7:0] <= ui_in;
-                    1: if (uio_in[2]) x[13:8] <= ui_in[5:0]; else x[7:0] <= ui_in;
-                    2: if (uio_in[2]) p[13:8] <= ui_in[5:0]; else p[7:0] <= ui_in;
-                    3: if (uio_in[2]) r[13:8] <= ui_in[5:0]; else r[7:0] <= ui_in;
+            if ((idle_write && !defer_xz_write) || replay_xz_write) begin
+                case (write_address)
+                    0: if (write_upper) z[13:8] <= write_byte[5:0]; else z[7:0] <= write_byte;
+                    1: if (write_upper) x[13:8] <= write_byte[5:0]; else x[7:0] <= write_byte;
+                    2: if (write_upper) p[13:8] <= write_byte[5:0]; else p[7:0] <= write_byte;
+                    3: if (write_upper) r[13:8] <= write_byte[5:0]; else r[7:0] <= write_byte;
                 endcase
             end
             case (state)
                 IDLE: if (uio_in[4]) begin
-                    delta <= $signed({z[13], z}) - $signed({x[13], x});
+                    delta <= {4'b0, defer_xz_write, uio_in[0], uio_in[2], ui_in};
                     ready <= 0;
                     state <= DIV_START;
                 end
-                DIV_START: state <= DIV_WAIT;
+                DIV_START: begin
+                    delta <= $signed(alu_y);
+                    state <= DIV_WAIT;
+                end
                 DIV_WAIT: if (div_done) begin
                     state <= X_START;
                 end
                 X_START: state <= X_WAIT;
                 X_WAIT: if (mul_done) begin
-                    x_out <= alu_y;
+                    x_out <= alu_y[13:0];
                     state <= P_START;
                 end
                 P_START: state <= P_WAIT;
                 P_WAIT: if (mul_done) begin
-                    p_out <= alu_y;
+                    p_out <= alu_y[13:0];
                     state <= FINISH;
                 end
                 FINISH: begin
