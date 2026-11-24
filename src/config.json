@@ -1,7 +1,7 @@
 {
-  "//": "TT SKY130 / LibreLane setup; 1x1 tile, 19.047619048 ns target (52.5 MHz).",
+  "//": "TT SKY130 / LibreLane setup; 1x1 tile, 15.384615385 ns target (65 MHz).",
   "PL_TARGET_DENSITY_PCT": 75,
-  "CLOCK_PERIOD": 19.047619048,
+  "CLOCK_PERIOD": 15.384615385,
   "PL_RESIZER_HOLD_SLACK_MARGIN": 0.1,
   "GRT_RESIZER_HOLD_SLACK_MARGIN": 0.05,
   "RUN_LINTER": 1,
