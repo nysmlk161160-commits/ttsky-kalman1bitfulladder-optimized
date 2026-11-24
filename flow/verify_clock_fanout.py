@@ -31,15 +31,21 @@ branch_fanouts = [len(input_loads(cells[name][1]['X'])) for name in branches]
 assert all(0 < n <= limit for n in branch_fanouts), branch_fanouts
 
 
-def data_fanouts(port, branch):
-    if branch not in cells:
-        return {}
-    master, pins = cells[branch]
-    assert master.startswith('sky130_fd_sc_hd__buf_'), branch
-    driver = next(name for name, (_, p) in cells.items()
-                  if p.get('X') == pins['A'] and p.get('A') == port)
-    fanouts = {name: len(input_loads(cells[name][1]['X'])) for name in (driver, branch)}
-    assert all(0 < n <= limit for n in fanouts.values()), fanouts
+def data_fanouts(port):
+    # A split buffer is only inserted when the existing driver has enough
+    # loads. Check the actual port net and all downstream buffer nets.
+    fanouts = {}
+    pending = [(port, port)]
+    while pending:
+        driver, net = pending.pop()
+        assert driver not in fanouts, (port, driver)
+        loads = input_loads(net)
+        assert 0 < len(loads) <= limit, (port, driver, net, loads)
+        fanouts[driver] = len(loads)
+        for name, pin in loads:
+            master, pins = cells[name]
+            if pin == 'A' and master.startswith(('sky130_fd_sc_hd__buf_', 'sky130_fd_sc_hd__clkdlybuf')):
+                pending.append((name, pins['X']))
     return fanouts
 
 
@@ -66,10 +72,9 @@ for report in reports:
     corners.append(dict(corner=corner, **row))
 
 ui_data_fanouts = {
-    f'ui_in[{bit}]': data_fanouts(f'ui_in[{bit}]', f'input{bit + 2}_fanout_stage')
-    for bit in range(6)
+    f'ui_in[{bit}]': data_fanouts(f'ui_in[{bit}]')
+    for bit in range(8)
 }
-assert all(ui_data_fanouts.values()), ui_data_fanouts
 
 result = dict(
     passed=True, root_fanout=len(root_loads), branch_fanouts=branch_fanouts,
@@ -77,7 +82,7 @@ result = dict(
     input4_branch_fanouts=ui_data_fanouts['ui_in[2]'],
     input7_branch_fanouts=ui_data_fanouts['ui_in[5]'],
     ui_data_branch_fanouts=ui_data_fanouts,
-    input12_branch_fanouts=data_fanouts('uio_in[2]', 'input12_fanout_stage'),
+    input12_branch_fanouts=data_fanouts('uio_in[2]'),
     corners=corners,
 )
 (run / 'fanout_acceptance.json').write_text(json.dumps(result, indent=2) + '\n')
